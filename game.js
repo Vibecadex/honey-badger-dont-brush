@@ -50,14 +50,15 @@ window.addEventListener('error', (e) => {
     // Legacy slot names retained so the generated full-body state art can drop
     // into the existing renderer without disturbing the shape fallback.
     body: {
-      src: 'assets/badger_ref_safe.png',
+      src: 'assets/Badger_Neutral.png',
       anchor: { x: 0.5, y: 1.0 },
     },
-    head_turning:  { src: 'assets/badger_ref_turning.png',  anchor: { x: 0.5, y: 1.0 } },
-    head_watching: { src: 'assets/badger_ref_watching.png', anchor: { x: 0.5, y: 1.0 } },
-    head_biting:   { src: 'assets/badger_ref_biting.png',   anchor: { x: 0.5, y: 1.0 } },
-    comb:          { src: 'assets/brush_sprite.png',           anchor: { x: 0.5, y: 0.5 } },
-    background:    { src: 'assets/background_painted.png',     anchor: { x: 0.5, y: 0.5 } },
+    head_turning:   { src: 'assets/Badger_alert.png',          anchor: { x: 0.5, y: 1.0 } },
+    head_watching:  { src: 'assets/Badger_lockedOn.png',       anchor: { x: 0.5, y: 1.0 } },
+    head_biting:    { src: 'assets/Badger_Pounce.png',         anchor: { x: 0.5, y: 1.0 } },
+    head_jumpscare: { src: 'assets/Badger_Jumpscare.png',      anchor: { x: 0.5, y: 1.0 } },
+    comb:           { src: 'assets/brush_sprite.png',          anchor: { x: 0.5, y: 0.5 } },
+    background:     { src: 'assets/background_painted.png',    anchor: { x: 0.5, y: 0.5 } },
   };
   const sprites = {}; // slot -> HTMLImageElement once loaded
   function loadSprites() {
@@ -67,6 +68,13 @@ window.addEventListener('error', (e) => {
       img.onerror = () => { console.warn(`Missing sprite: ${def.src}`); };
       img.src = def.src;
     }
+  }
+
+  const jumpscareSfx = new Audio('assets/JumpScare.mp3');
+  jumpscareSfx.preload = 'auto';
+  jumpscareSfx.volume = 0.9;
+  function playJumpscareSfx() {
+    try { jumpscareSfx.currentTime = 0; jumpscareSfx.play(); } catch (_) {}
   }
   // Helper for drawing a sprite at (x, y) with optional width/rotation.
   function drawSprite(slot, x, y, width, rotation = 0, flipX = false, scaleX = 1, scaleY = 1, alpha = 1) {
@@ -1067,6 +1075,7 @@ window.addEventListener('error', (e) => {
     const b = badger();
     spawnImpactBurst(b.cx + b.bodyRx * 0.42, b.cy - b.bodyRy * 0.12, 'bite');
     playBite();
+    playJumpscareSfx();
   }
 
   function winRun() {
@@ -1319,7 +1328,7 @@ window.addEventListener('error', (e) => {
       let spriteSlot = 'body';
       if (state === STATE.TURNING) spriteSlot = 'head_turning';
       else if (state === STATE.WATCHING) spriteSlot = 'head_watching';
-      else if (state === STATE.BITING) spriteSlot = 'head_biting';
+      else if (state === STATE.BITING) spriteSlot = biteT < 0.55 ? 'head_biting' : 'head_jumpscare';
 
       if (state === STATE.TURNING) {
         spriteX += turnT * 6;
