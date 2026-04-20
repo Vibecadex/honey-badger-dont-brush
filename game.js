@@ -1047,7 +1047,7 @@ window.addEventListener('error', (e) => {
         if (game.stateTimer >= nextTimings.watching) setState(STATE.SAFE);
         break;
       case STATE.BITING:
-        if (game.stateTimer >= 900) endRun();
+        if (game.stateTimer >= 2400) endRun();
         break;
       case STATE.WON:
         // Brief celebration pause before the overlay.
