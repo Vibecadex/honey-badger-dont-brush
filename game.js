@@ -300,16 +300,13 @@ window.addEventListener("error", (e) => {
   }
 
   function pushCombGhost(x, y, angle, size, strength) {
-    combGhosts.push({
-      x,
-      y,
-      angle,
-      size,
-      life: 60 + strength * 90,
-      maxLife: 60 + strength * 90,
-      scale: 0.92 + strength * 0.18,
-    });
-    while (combGhosts.length > 10) combGhosts.shift();
+    // Ghost trail tuned down: at the comb's current 140-ish px size, 10
+    // semi-transparent copies stacked behind the live sprite read as a
+    // smear. Cap length at 3, halve the life so they don't linger into
+    // the next stroke, and drawComb (below) alpha-scales them lower too.
+    const life = 40 + strength * 55;
+    combGhosts.push({ x, y, angle, size, life, maxLife: life, scale: 0.92 + strength * 0.18 });
+    while (combGhosts.length > 3) combGhosts.shift();
   }
 
   function updateTransientLists(rawDt) {
@@ -985,6 +982,104 @@ window.addEventListener("error", (e) => {
   applyKnobOverrides();
 
   // ------------------------------------------------------------------
+  // Progression scaler (score-keyed, with plateau + ramp zones)
+  // ------------------------------------------------------------------
+  // PROGRESSION_STOPS defines the difficulty ladder as a sequence of
+  // (score, tier) waypoints. Between adjacent stops the active config
+  // is a LINEAR LERP of the two tiers' values — so equal-tier adjacent
+  // stops form a "plateau" (no change in feel), and different-tier
+  // adjacent stops form a "ramp" (smooth transition).
+  //
+  // Default ladder:
+  //   0      →  EASY      \
+  //   350    →  EASY       } plateau: 0–350 pure EASY
+  //   700    →  NORMAL    →  ramp: 350–700 EASY → NORMAL
+  //   1400   →  NORMAL    →  plateau: 700–1400 pure NORMAL
+  //   2800   →  HARD      →  ramp: 1400–2800 NORMAL → HARD
+  //   (above 2800)         →  pinned HARD
+  //
+  // Picked-tier floor: you never drop below the difficulty you chose.
+  // Pick NORMAL and scores under 1400 still feel fully NORMAL (the
+  // EASY-side of any ramp is floored up), then 1400–2800 ramps you to
+  // HARD. Pick HARD and you stay HARD regardless of score.
+  const PROGRESSION_TIERS = ['EASY', 'NORMAL', 'HARD'];
+  const PROGRESSION_KEYS = [
+    'AFK_TIMEOUT_MS', 'AFK_WARN_MS',
+    'SCORE_COEFF', 'BRUSH_DELTA_CAP', 'COHERENCE_MIN',
+    'WIN_SCORE_MIN', 'WIN_SCORE_MAX',
+    'SAFE_COMPRESS', 'TURN_COMPRESS',
+    'BITING_HOLD_MS', 'GLANCE_PROB',
+  ];
+  const PROGRESSION_STOPS = [
+    { at: 0,    tier: 'EASY'   },
+    { at: 350,  tier: 'EASY'   }, // plateau 0-350 pure EASY
+    { at: 700,  tier: 'NORMAL' }, // ramp    350-700 EASY → NORMAL
+    { at: 1400, tier: 'NORMAL' }, // plateau 700-1400 pure NORMAL
+    { at: 2800, tier: 'HARD'   }, // ramp    1400-2800 NORMAL → HARD
+  ];
+
+  function lerpNumber(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function blendArchetypes(aArr, bArr, t) {
+    const n = Math.max(aArr.length, bArr.length);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const a = aArr[i] || aArr[aArr.length - 1];
+      const b = bArr[i] || bArr[bArr.length - 1];
+      out.push({
+        cumW: lerpNumber(a.cumW, b.cumW, t),
+        base: lerpNumber(a.base, b.base, t),
+        rand: lerpNumber(a.rand, b.rand, t),
+      });
+    }
+    return out;
+  }
+
+  // Resolve the score into a bracket: { loTier, hiTier, t } where t is 0..1
+  // within the bracket. Scores past the last stop pin to the last tier.
+  function progressionBracket(score) {
+    const last = PROGRESSION_STOPS[PROGRESSION_STOPS.length - 1];
+    if (score >= last.at) return { loTier: last.tier, hiTier: last.tier, t: 0 };
+    for (let i = 0; i < PROGRESSION_STOPS.length - 1; i++) {
+      const lo = PROGRESSION_STOPS[i];
+      const hi = PROGRESSION_STOPS[i + 1];
+      if (score >= lo.at && score < hi.at) {
+        const span = hi.at - lo.at;
+        const t = span > 0 ? (score - lo.at) / span : 0;
+        return { loTier: lo.tier, hiTier: hi.tier, t };
+      }
+    }
+    return { loTier: PROGRESSION_STOPS[0].tier, hiTier: PROGRESSION_STOPS[0].tier, t: 0 };
+  }
+
+  // Apply the progression-driven blend to `config`. Called every frame.
+  // Mutates Group A knobs + archetype arrays only; Group B (visuals) stays
+  // at the picked-preset values. DEV / unknown presets skip ramping.
+  function applyProgressionToConfig() {
+    const startName = game._startTierName || config._presetName;
+    const startIdx = PROGRESSION_TIERS.indexOf(startName);
+    if (startIdx < 0) return; // DEV or unknown: don't auto-ramp
+
+    const { loTier, hiTier, t } = progressionBracket(game.score || 0);
+    // Floor both ends to the starting tier so picking NORMAL or HARD can't
+    // regress below the player's chosen difficulty.
+    const loIdx = Math.max(PROGRESSION_TIERS.indexOf(loTier), startIdx);
+    const hiIdx = Math.max(PROGRESSION_TIERS.indexOf(hiTier), startIdx);
+    const loPreset = DIFFICULTY_PRESETS[PROGRESSION_TIERS[loIdx]];
+    const hiPreset = DIFFICULTY_PRESETS[PROGRESSION_TIERS[hiIdx]];
+    for (const k of PROGRESSION_KEYS) {
+      config[k] = lerpNumber(loPreset[k], hiPreset[k], t);
+    }
+    config.SAFE_ARCHETYPES = blendArchetypes(loPreset.SAFE_ARCHETYPES, hiPreset.SAFE_ARCHETYPES, t);
+    config.WATCHING_ARCHETYPES = blendArchetypes(loPreset.WATCHING_ARCHETYPES, hiPreset.WATCHING_ARCHETYPES, t);
+
+    // Expose a continuous tier float (loIdx..hiIdx) for debug/telemetry.
+    game._progressionTierFloat = loIdx + (hiIdx - loIdx) * t;
+  }
+
+  // ------------------------------------------------------------------
   // Player-facing difficulty picker (Settings menu in the start overlay).
   // DEV preset stays dev-only: still reachable via ?difficulty=DEV, but
   // hidden from the in-game picker so casual players don't stumble in.
@@ -1299,6 +1394,11 @@ window.addEventListener("error", (e) => {
     const pointerX = input.onCanvas ? (input.x - w / 2) / w : 0;
     const pointerY = input.onCanvas ? (input.y - h * 0.58) / h : 0;
 
+    // Drift Group-A knobs toward the next tier as time + score accumulate.
+    // No-op once the run ends or the picked tier isn't on the progression
+    // ladder (e.g. DEV).
+    applyProgressionToConfig();
+
     updateTransientLists(rawDt);
 
     if (game.freezeTimer > 0)
@@ -1334,7 +1434,7 @@ window.addEventListener("error", (e) => {
     if (input.onCanvas && brushSpeed > 1.2 && game.ghostCooldown <= 0) {
       const angle = Math.max(-0.6, Math.min(0.6, input.moveVX * 0.04));
       const strength = clamp(brushSpeed / 14, 0, 1);
-      pushCombGhost(input.x, input.y, angle, 140 + strength * 21, strength);
+      pushCombGhost(input.x, input.y, angle, config.COMB_SIZE + strength * 21, strength);
       game.ghostCooldown = input.down ? 18 : 34;
     }
 
@@ -1432,9 +1532,13 @@ window.addEventListener("error", (e) => {
             game.goalPulse + clamp(gain * 0.07, 0.02, 0.08),
           );
         }
-        if (game.score >= game.winTarget) {
-          winRun();
-          break;
+        // Goal is a soft ceiling — crossing it pulses the goal panel once
+        // but the run keeps going. Progression (see update loop) slowly
+        // drifts difficulty upward toward the next tier.
+        if (!game.goalCrossed && game.score >= game.winTarget) {
+          game.goalCrossed = true;
+          game.goalPulse = Math.max(game.goalPulse, 0.9);
+          game.statePulse = Math.max(game.statePulse, 0.6);
         }
         if (game.stateTimer >= nextTimings.safe) setState(STATE.TURNING);
         break;
@@ -1454,9 +1558,10 @@ window.addEventListener("error", (e) => {
             game.goalPulse + clamp(gain * 0.06, 0.02, 0.07),
           );
         }
-        if (game.score >= game.winTarget) {
-          winRun();
-          break;
+        if (!game.goalCrossed && game.score >= game.winTarget) {
+          game.goalCrossed = true;
+          game.goalPulse = Math.max(game.goalPulse, 0.9);
+          game.statePulse = Math.max(game.statePulse, 0.6);
         }
         if (game.stateTimer >= nextTimings.turning) setState(STATE.WATCHING);
         break;
@@ -1470,7 +1575,7 @@ window.addEventListener("error", (e) => {
         if (game.stateTimer >= nextTimings.watching) setState(STATE.SAFE);
         break;
       case STATE.BITING:
-        if (game.stateTimer >= 2400) endRun();
+        if (game.stateTimer >= config.BITING_HOLD_MS) endRun();
         break;
       case STATE.WON:
         // Brief celebration pause before the overlay.
@@ -1547,6 +1652,15 @@ window.addEventListener("error", (e) => {
   function startRun() {
     const a = initAudio();
     if (a && a.actx.state === "suspended") a.actx.resume();
+    // Re-apply the picked preset so a previous run's progression drift
+    // doesn't leak into this one's starting feel. The user's picked
+    // difficulty is the ground truth each start.
+    applyPreset(config._presetName);
+    applyKnobOverrides();
+    game._startTierName = config._presetName;
+    game.sessionStartedAt = performance.now();
+    game._progressionTierFloat = PROGRESSION_TIERS.indexOf(config._presetName);
+    game.goalCrossed = false;
     game.score = 0;
     game.afkTimer = 0;
     game.endReason = null;
@@ -1647,7 +1761,9 @@ window.addEventListener("error", (e) => {
     const scaleY = (input.down ? 0.92 : 1) + game.brushGlow * 0.03;
 
     for (const ghost of combGhosts) {
-      const alpha = clamp(ghost.life / ghost.maxLife, 0, 1) * 0.2;
+      // Was 0.2 across 10 ghosts → visible smear at ×2.5 comb scale.
+      // 0.07 × 3 ghosts keeps a whisper of motion cue without ghosting.
+      const alpha = clamp(ghost.life / ghost.maxLife, 0, 1) * 0.07;
       drawSprite(
         "comb",
         ghost.x,
