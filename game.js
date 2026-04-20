@@ -50,12 +50,12 @@ window.addEventListener('error', (e) => {
     // Legacy slot names retained so the generated full-body state art can drop
     // into the existing renderer without disturbing the shape fallback.
     body: {
-      src: 'assets/badger_sprite_safe.png',
+      src: 'assets/badger_ref_safe.png',
       anchor: { x: 0.5, y: 1.0 },
     },
-    head_turning:  { src: 'assets/badger_sprite_turning.png',  anchor: { x: 0.5, y: 1.0 } },
-    head_watching: { src: 'assets/badger_sprite_watching.png', anchor: { x: 0.5, y: 1.0 } },
-    head_biting:   { src: 'assets/badger_sprite_biting.png',   anchor: { x: 0.5, y: 1.0 } },
+    head_turning:  { src: 'assets/badger_ref_turning.png',  anchor: { x: 0.5, y: 1.0 } },
+    head_watching: { src: 'assets/badger_ref_watching.png', anchor: { x: 0.5, y: 1.0 } },
+    head_biting:   { src: 'assets/badger_ref_biting.png',   anchor: { x: 0.5, y: 1.0 } },
     comb:          { src: 'assets/brush_sprite.png',           anchor: { x: 0.5, y: 0.5 } },
     background:    { src: 'assets/background_painted.png',     anchor: { x: 0.5, y: 0.5 } },
   };
@@ -1309,35 +1309,36 @@ window.addEventListener('error', (e) => {
         : state === STATE.WATCHING
           ? Math.sin(now * 7.8) * 2.6
           : 0;
-      let spriteW = b.bodyRx * (state === STATE.BITING ? 3.18 : state === STATE.WATCHING ? 3.06 : 2.98);
-      spriteW *= 1 + biteT * 0.12 + game.badgerKick * 0.05;
+      let spriteW = b.bodyRx * (state === STATE.BITING ? 2.46 : state === STATE.WATCHING ? 2.56 : state === STATE.TURNING ? 2.7 : 2.78);
+      spriteW *= 1 + biteT * 0.04 + game.badgerKick * 0.04;
       let spriteX = b.cx;
-      let spriteY = b.cy + b.bodyRy * 1.06 + breathe + game.badgerKick * 8;
-      let rotation = -game.badgerKick * 0.05;
-      let scaleX = 1 + game.badgerKick * 0.08;
-      let scaleY = 1 - game.badgerKick * 0.05;
+      let spriteY = b.cy + b.bodyRy * 1.08 + breathe + game.badgerKick * 5;
+      let rotation = -game.badgerKick * 0.035;
+      let scaleX = 1 + game.badgerKick * 0.045;
+      let scaleY = 1 - game.badgerKick * 0.03;
       let spriteSlot = 'body';
       if (state === STATE.TURNING) spriteSlot = 'head_turning';
       else if (state === STATE.WATCHING) spriteSlot = 'head_watching';
       else if (state === STATE.BITING) spriteSlot = 'head_biting';
 
       if (state === STATE.TURNING) {
-        spriteX += turnT * 10;
-        spriteY += turnT * 3;
-        rotation += turnT * 0.08;
-        scaleX += turnT * 0.04;
+        spriteX += turnT * 6;
+        spriteY += turnT * 2;
+        rotation += turnT * 0.045;
+        scaleX += turnT * 0.02;
       } else if (state === STATE.WATCHING) {
-        spriteX += 7;
-        rotation += Math.sin(now * 9.5) * 0.014;
-        scaleY += Math.sin(now * 9.5) * 0.02;
+        spriteX += 2;
+        spriteY += 8;
+        rotation += Math.sin(now * 9.5) * 0.009;
+        scaleY += Math.sin(now * 9.5) * 0.012;
       } else if (state === STATE.BITING) {
-        spriteX += 18 * biteT;
-        spriteY -= 10 * biteT;
-        rotation -= 0.08 + biteT * 0.06;
-        scaleX += biteT * 0.12;
-        scaleY -= biteT * 0.08;
+        spriteX += 6 * biteT;
+        spriteY += 2 - biteT * 4;
+        rotation -= 0.04 + biteT * 0.025;
+        scaleX += biteT * 0.035;
+        scaleY -= biteT * 0.025;
       } else if (state === STATE.WON) {
-        spriteY -= Math.sin(Math.min(1, game.stateTimer / 700) * Math.PI) * 14;
+        spriteY -= Math.sin(Math.min(1, game.stateTimer / 700) * Math.PI) * 10;
         rotation += Math.sin(now * 12) * 0.02;
         scaleX += 0.04;
         scaleY += 0.03;
