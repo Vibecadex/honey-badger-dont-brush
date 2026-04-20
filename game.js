@@ -57,7 +57,7 @@ window.addEventListener('error', (e) => {
     head_watching:  { src: 'assets/Badger_lockedOn.png',       anchor: { x: 0.5, y: 1.0 } },
     head_biting:    { src: 'assets/Badger_Pounce.png',         anchor: { x: 0.5, y: 1.0 } },
     head_jumpscare: { src: 'assets/Badger_Jumpscare.png',      anchor: { x: 0.5, y: 1.0 } },
-    comb:           { src: 'assets/Comb_angle.png',            anchor: { x: 0.28, y: 0.28 } },
+    comb:           { src: 'assets/Comb_angle.png',            anchor: { x: 0.82, y: 0.88 } },
     background:     { src: 'assets/background_painted.png',    anchor: { x: 0.5, y: 0.5 } },
   };
   const sprites = {}; // slot -> HTMLImageElement once loaded
@@ -970,7 +970,7 @@ window.addEventListener('error', (e) => {
     if (input.onCanvas && brushSpeed > 1.2 && game.ghostCooldown <= 0) {
       const angle = Math.max(-0.6, Math.min(0.6, input.moveVX * 0.04));
       const strength = clamp(brushSpeed / 14, 0, 1);
-      pushCombGhost(input.x, input.y, angle, 120 + strength * 18, strength);
+      pushCombGhost(input.x, input.y, angle, 200 + strength * 30, strength);
       game.ghostCooldown = input.down ? 18 : 34;
     }
 
@@ -1243,7 +1243,7 @@ window.addEventListener('error', (e) => {
 
     for (const ghost of combGhosts) {
       const alpha = clamp(ghost.life / ghost.maxLife, 0, 1) * 0.2;
-      drawSprite('comb', ghost.x, ghost.y, ghost.size, ghost.angle + Math.PI, false, ghost.scale, ghost.scale, alpha);
+      drawSprite('comb', ghost.x, ghost.y, ghost.size, ghost.angle, true, ghost.scale, ghost.scale, alpha);
     }
 
     if (game.brushGlow > 0.04) {
@@ -1259,11 +1259,11 @@ window.addEventListener('error', (e) => {
       ctx.restore();
     }
 
-    if (drawSprite('comb', x, y, 120, angle + Math.PI, false, scaleX, scaleY)) {
+    if (drawSprite('comb', x, y, 200, angle, true, scaleX, scaleY)) {
       if (speed > 2 || input.down) {
         ctx.save();
         ctx.translate(x, y);
-        ctx.rotate(angle + Math.PI);
+        ctx.rotate(angle);
         ctx.strokeStyle = `rgba(255, 244, 212, ${0.22 + clamp(speed / 30, 0, 0.25)})`;
         ctx.lineWidth = 2;
         for (let i = 0; i < 3; i++) {
