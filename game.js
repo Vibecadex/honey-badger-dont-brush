@@ -223,6 +223,23 @@ window.addEventListener('error', (e) => {
       gravity: 16,
       drag: 0.9,
     });
+    // Gentle fur shed: 1-2 tufts per burst in the badger's own coat colours.
+    const furColors = ['215,215,212', '168,165,158', '70,62,55', '245,242,232'];
+    const furCount = 1 + (Math.random() < intensity * 0.6 ? 1 : 0);
+    emitParticles(x, y, furCount, {
+      color: furColors[(Math.random() * furColors.length) | 0],
+      speedMin: 8,
+      speedMax: 28,
+      sizeMin: 2.4,
+      sizeMax: 4.2,
+      lifeMin: 520,
+      lifeMax: 920,
+      spread: Math.PI * 0.7,
+      angle: -Math.PI / 2,
+      gravity: 32,
+      drag: 0.93,
+      shape: 'fur',
+    });
   }
 
   function spawnImpactBurst(x, y, mode) {
@@ -308,6 +325,17 @@ window.addEventListener('error', (e) => {
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025);
+        ctx.stroke();
+      } else if (p.shape === 'fur') {
+        const rot = Math.atan2(p.vy, p.vx);
+        const len = Math.max(2, p.size * 1.4);
+        ctx.translate(p.x, p.y);
+        ctx.rotate(rot);
+        ctx.lineWidth = Math.max(0.7, p.size * 0.35);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-len * 0.5, 0);
+        ctx.lineTo(len * 0.5, 0);
         ctx.stroke();
       } else {
         ctx.beginPath();
@@ -1517,7 +1545,7 @@ window.addEventListener('error', (e) => {
 
   // ----- Start wiring -----
   loadSprites();
-  overTitle.textContent = 'Brush the Ratel';
+  overTitle.textContent = "Honey Badger Don't Brush";
   overSub.textContent = 'Brush gently. Stop when he looks at you.';
   startBtn.addEventListener('click', startRun);
   bestEl.textContent = game.best;
