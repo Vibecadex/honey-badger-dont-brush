@@ -926,6 +926,7 @@ window.addEventListener("error", (e) => {
     knobs: "tamebadger.knobs",
     telemetry: "tamebadger.telemetry",
     telemetryFlag: "tamebadger.telemetry.enabled",
+    scalerOverlay: "tamebadger.scaler.overlay",
   };
 
   // `config` is a plain mutable object. Readers dereference every frame, so
@@ -1022,21 +1023,6 @@ window.addEventListener("error", (e) => {
     return a + (b - a) * t;
   }
 
-  function blendArchetypes(aArr, bArr, t) {
-    const n = Math.max(aArr.length, bArr.length);
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      const a = aArr[i] || aArr[aArr.length - 1];
-      const b = bArr[i] || bArr[bArr.length - 1];
-      out.push({
-        cumW: lerpNumber(a.cumW, b.cumW, t),
-        base: lerpNumber(a.base, b.base, t),
-        rand: lerpNumber(a.rand, b.rand, t),
-      });
-    }
-    return out;
-  }
-
   // Resolve the score into a bracket: { loTier, hiTier, t } where t is 0..1
   // within the bracket. Scores past the last stop pin to the last tier.
   function progressionBracket(score) {
@@ -1054,15 +1040,43 @@ window.addEventListener("error", (e) => {
     return { loTier: PROGRESSION_STOPS[0].tier, hiTier: PROGRESSION_STOPS[0].tier, t: 0 };
   }
 
+  // Reused each frame to avoid per-frame array/object allocation.
+  const _archetypeScratch = {
+    SAFE_ARCHETYPES: [{ cumW: 0, base: 0, rand: 0 }, { cumW: 0, base: 0, rand: 0 }, { cumW: 0, base: 0, rand: 0 }],
+    WATCHING_ARCHETYPES: [{ cumW: 0, base: 0, rand: 0 }, { cumW: 0, base: 0, rand: 0 }, { cumW: 0, base: 0, rand: 0 }],
+  };
+
+  function blendArchetypesInto(out, aArr, bArr, t) {
+    const n = Math.min(out.length, Math.max(aArr.length, bArr.length));
+    for (let i = 0; i < n; i++) {
+      const a = aArr[i] || aArr[aArr.length - 1];
+      const b = bArr[i] || bArr[bArr.length - 1];
+      const row = out[i];
+      row.cumW = lerpNumber(a.cumW, b.cumW, t);
+      row.base = lerpNumber(a.base, b.base, t);
+      row.rand = lerpNumber(a.rand, b.rand, t);
+    }
+    return out;
+  }
+
   // Apply the progression-driven blend to `config`. Called every frame.
   // Mutates Group A knobs + archetype arrays only; Group B (visuals) stays
   // at the picked-preset values. DEV / unknown presets skip ramping.
+  // Early-outs when score hasn't changed since the last apply, because the
+  // output depends only on score + startTier (both stable between frames).
+  let _lastProgScore = NaN;
+  let _lastProgStart = null;
   function applyProgressionToConfig() {
     const startName = game._startTierName || config._presetName;
     const startIdx = PROGRESSION_TIERS.indexOf(startName);
     if (startIdx < 0) return; // DEV or unknown: don't auto-ramp
 
-    const { loTier, hiTier, t } = progressionBracket(game.score || 0);
+    const score = game.score || 0;
+    if (score === _lastProgScore && startName === _lastProgStart) return;
+    _lastProgScore = score;
+    _lastProgStart = startName;
+
+    const { loTier, hiTier, t } = progressionBracket(score);
     // Floor both ends to the starting tier so picking NORMAL or HARD can't
     // regress below the player's chosen difficulty.
     const loIdx = Math.max(PROGRESSION_TIERS.indexOf(loTier), startIdx);
@@ -1072,11 +1086,25 @@ window.addEventListener("error", (e) => {
     for (const k of PROGRESSION_KEYS) {
       config[k] = lerpNumber(loPreset[k], hiPreset[k], t);
     }
-    config.SAFE_ARCHETYPES = blendArchetypes(loPreset.SAFE_ARCHETYPES, hiPreset.SAFE_ARCHETYPES, t);
-    config.WATCHING_ARCHETYPES = blendArchetypes(loPreset.WATCHING_ARCHETYPES, hiPreset.WATCHING_ARCHETYPES, t);
+    config.SAFE_ARCHETYPES = blendArchetypesInto(
+      _archetypeScratch.SAFE_ARCHETYPES, loPreset.SAFE_ARCHETYPES, hiPreset.SAFE_ARCHETYPES, t,
+    );
+    config.WATCHING_ARCHETYPES = blendArchetypesInto(
+      _archetypeScratch.WATCHING_ARCHETYPES, loPreset.WATCHING_ARCHETYPES, hiPreset.WATCHING_ARCHETYPES, t,
+    );
 
-    // Expose a continuous tier float (loIdx..hiIdx) for debug/telemetry.
+    // Exposed for the scaler overlay / telemetry.
     game._progressionTierFloat = loIdx + (hiIdx - loIdx) * t;
+    game._progressionLoTier = PROGRESSION_TIERS[loIdx];
+    game._progressionHiTier = PROGRESSION_TIERS[hiIdx];
+    game._progressionT = t;
+  }
+
+  // Invalidate the progression cache so the next apply recomputes —
+  // called when the picked preset changes or a new run starts.
+  function invalidateProgressionCache() {
+    _lastProgScore = NaN;
+    _lastProgStart = null;
   }
 
   // ------------------------------------------------------------------
@@ -1093,7 +1121,84 @@ window.addEventListener("error", (e) => {
     // Knob overrides are cleared on explicit difficulty change so the
     // picked preset reflects its authored feel, not a stale hand-tune.
     try { localStorage.removeItem(LS_KEYS.knobs); } catch (e) {}
+    invalidateProgressionCache();
     syncDifficultyUI();
+  }
+
+  // ------------------------------------------------------------------
+  // Scaling overlay (dev HUD) — small panel in the lower-right showing
+  // the live progression ladder. Toggled from Settings → "Show scaling
+  // overlay (dev)". Off by default, persisted in localStorage.
+  // ------------------------------------------------------------------
+  const scalerOverlay = {
+    enabled: (() => {
+      try { return localStorage.getItem(LS_KEYS.scalerOverlay) === '1'; }
+      catch (e) { return false; }
+    })(),
+    setEnabled(on) {
+      this.enabled = !!on;
+      try { localStorage.setItem(LS_KEYS.scalerOverlay, on ? '1' : '0'); } catch (e) {}
+    },
+  };
+
+  function drawScalerOverlay() {
+    if (!scalerOverlay.enabled) return;
+    const { w, h } = logical();
+    const padX = 10, padY = 8, lineH = 14, width = 210;
+    const score = Math.floor(game.score || 0);
+    const loTier = game._progressionLoTier || config._presetName;
+    const hiTier = game._progressionHiTier || config._presetName;
+    const t = game._progressionT || 0;
+    const zone = loTier === hiTier ? `plateau — ${loTier}` : `ramp ${loTier} → ${hiTier} (${Math.round(t * 100)}%)`;
+    const lines = [
+      `score  ${score}  /  goal ${Math.ceil(game.winTarget)}`,
+      `zone   ${zone}`,
+      `tier   ${(game._progressionTierFloat ?? 0).toFixed(2)}   start ${game._startTierName || config._presetName}`,
+      `coeff  ${config.SCORE_COEFF.toFixed(3)}  cmp ${config.SAFE_COMPRESS.toFixed(2)}`,
+      `bite   ${Math.round(config.BITING_HOLD_MS)} ms   afk ${Math.round(config.AFK_TIMEOUT_MS / 1000)}s`,
+    ];
+
+    // Panel background
+    const boxH = lines.length * lineH + padY * 2 + 14; // extra 14 for ladder bar
+    const boxX = w - width - 8;
+    const boxY = h - boxH - 8;
+    ctx.save();
+    ctx.fillStyle = 'rgba(8, 6, 4, 0.78)';
+    ctx.strokeStyle = 'rgba(255, 225, 180, 0.2)';
+    ctx.lineWidth = 1;
+    roundRect(ctx, boxX, boxY, width, boxH, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    // Text lines
+    ctx.font = '11px ui-monospace, Menlo, Consolas, monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(255, 225, 180, 0.9)';
+    lines.forEach((line, i) => {
+      ctx.fillText(line, boxX + padX, boxY + padY + i * lineH);
+    });
+
+    // Ladder bar — visualizes where `score` falls across PROGRESSION_STOPS.
+    const barX = boxX + padX;
+    const barY = boxY + boxH - 10;
+    const barW = width - padX * 2;
+    const firstAt = PROGRESSION_STOPS[0].at;
+    const lastAt = PROGRESSION_STOPS[PROGRESSION_STOPS.length - 1].at;
+    const range = Math.max(1, lastAt - firstAt);
+    ctx.fillStyle = 'rgba(255, 225, 180, 0.18)';
+    ctx.fillRect(barX, barY, barW, 4);
+    // Tier stop markers
+    ctx.fillStyle = 'rgba(255, 225, 180, 0.4)';
+    for (const stop of PROGRESSION_STOPS) {
+      const x = barX + ((stop.at - firstAt) / range) * barW;
+      ctx.fillRect(x - 1, barY - 2, 2, 8);
+    }
+    // Score cursor
+    const cursorFrac = Math.min(1, Math.max(0, (score - firstAt) / range));
+    const cursorX = barX + cursorFrac * barW;
+    ctx.fillStyle = '#e8b34a';
+    ctx.fillRect(cursorX - 1, barY - 4, 3, 12);
+    ctx.restore();
   }
 
   function syncDifficultyUI() {
@@ -1109,6 +1214,14 @@ window.addEventListener("error", (e) => {
     const panel = document.getElementById('settingsPanel');
     const options = document.getElementById('difficultyOptions');
     if (!btn || !panel || !options) return;
+
+    // Settings is hidden by default so players land on the natural scaling
+    // experience. Reveal only when `?settings=1` is on the URL — lets us
+    // (and dev tooling) get into the difficulty picker + scaler overlay.
+    try {
+      const p = new URLSearchParams(location.search);
+      if (p.get('settings') === '1') btn.hidden = false;
+    } catch (e) { /* URLSearchParams unavailable — leave hidden */ }
 
     // Populate the picker buttons once. Skip DEV from the public UI.
     options.innerHTML = '';
@@ -1131,6 +1244,15 @@ window.addEventListener("error", (e) => {
       options.appendChild(opt);
     }
     syncDifficultyUI();
+
+    // Scaler overlay toggle — small dev checkbox at the bottom of the panel.
+    const scalerCb = document.getElementById('scalerToggleCb');
+    if (scalerCb) {
+      scalerCb.checked = scalerOverlay.enabled;
+      scalerCb.addEventListener('change', () => {
+        scalerOverlay.setEnabled(scalerCb.checked);
+      });
+    }
 
     btn.addEventListener('click', () => {
       const expanded = !panel.hidden;
@@ -1640,7 +1762,7 @@ window.addEventListener("error", (e) => {
       overTitle.textContent = "Badger got bored";
       overSub.textContent = `No brushing for 15s.  Score: ${finalScore}  •  Best: ${game.best}`;
     } else {
-      overTitle.textContent = "You messed with baMauled!";
+      overTitle.textContent = "Mauled!";
       overSub.textContent = `Score: ${finalScore}  •  Best: ${game.best}`;
     }
     startBtn.textContent = "Try Again";
@@ -1657,6 +1779,7 @@ window.addEventListener("error", (e) => {
     // difficulty is the ground truth each start.
     applyPreset(config._presetName);
     applyKnobOverrides();
+    invalidateProgressionCache();
     game._startTierName = config._presetName;
     game.sessionStartedAt = performance.now();
     game._progressionTierFloat = PROGRESSION_TIERS.indexOf(config._presetName);
@@ -1729,6 +1852,7 @@ window.addEventListener("error", (e) => {
 
     drawComb();
     drawAfkWarning();
+    drawScalerOverlay();
   }
 
   function drawAfkWarning() {

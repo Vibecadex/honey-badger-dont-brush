@@ -260,6 +260,27 @@
     border-radius: 4px;
     font-size: 10.5px;
   }
+  /* Hidden-ish dev toggle — small, muted, sits below the hint so casual
+     players are unlikely to bother, but anyone play-testing can flip it. */
+  .settings-micro {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 6px;
+    margin-top: 2px;
+    font-size: 10.5px;
+    color: rgba(255, 225, 180, 0.55);
+    cursor: pointer;
+    user-select: none;
+  }
+  .settings-micro:hover { color: rgba(255, 225, 180, 0.85); }
+  .settings-micro em { font-style: normal; opacity: 0.7; }
+  .settings-micro input[type="checkbox"] {
+    width: 12px;
+    height: 12px;
+    accent-color: #e8b34a;
+    margin: 0;
+  }
   @keyframes overlayPop {
     0% {
       opacity: 0;
@@ -396,12 +417,16 @@
     <p id="overSub">Brush gently. Stop when he looks at you.</p>
     <div id="overlayButtons">
       <button id="startBtn">Start</button>
-      <button id="settingsBtn" type="button" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+      <button id="settingsBtn" type="button" aria-expanded="false" aria-controls="settingsPanel" hidden>Settings</button>
     </div>
     <div id="settingsPanel" hidden>
       <div class="settings-label">Difficulty</div>
       <div id="difficultyOptions" role="radiogroup" aria-label="Difficulty"></div>
       <div class="settings-hint">You can also press <kbd>]</kbd> to cycle or pass <code>?difficulty=HARD</code> in the URL.</div>
+      <label id="scalerToggle" class="settings-micro">
+        <input type="checkbox" id="scalerToggleCb" />
+        <span>Show scaling overlay <em>(dev)</em></span>
+      </label>
     </div>
   </div>
 
