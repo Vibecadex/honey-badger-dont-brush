@@ -196,51 +196,27 @@ window.addEventListener('error', (e) => {
   }
 
   function spawnBrushBurst(x, y, intensity) {
-    const n = 3 + Math.floor(intensity * 6);
-    emitParticles(x, y, n, {
-      color: '255,238,195',
-      speedMin: 24,
-      speedMax: 110 + intensity * 70,
-      sizeMin: 3.2,
-      sizeMax: 7 + intensity * 3,
-      lifeMin: 220,
-      lifeMax: 380,
-      spread: Math.PI * 0.9,
-      angle: -Math.PI / 2,
-      gravity: 10,
-      drag: 0.88,
-    });
-    emitParticles(x, y, 2 + Math.floor(intensity * 3), {
-      color: '224,168,96',
-      speedMin: 20,
-      speedMax: 75,
-      sizeMin: 4,
-      sizeMax: 8,
-      lifeMin: 260,
-      lifeMax: 440,
-      spread: Math.PI * 1.2,
-      angle: -Math.PI / 2,
-      gravity: 16,
-      drag: 0.9,
-    });
-    // Fur shed: 2-3 tufts per burst in the badger's own coat colours — bigger
-    // strands and longer life so the shedding cue is actually readable.
-    const furColors = ['235,235,232', '188,185,178', '90,82,72', '250,248,240'];
-    const furCount = 2 + (Math.random() < intensity * 0.65 ? 1 : 0);
-    emitParticles(x, y, furCount, {
-      color: furColors[(Math.random() * furColors.length) | 0],
-      speedMin: 10,
-      speedMax: 34,
-      sizeMin: 3.6,
-      sizeMax: 6.4,
-      lifeMin: 700,
-      lifeMax: 1100,
-      spread: Math.PI * 0.7,
-      angle: -Math.PI / 2,
-      gravity: 32,
-      drag: 0.93,
-      shape: 'fur',
-    });
+    // Only shed fur strands — no cream/tan spark debris. The previous layers
+    // read as energy sparks against the savanna; fur-only reads as "the
+    // badger is losing hair where I'm stroking."
+    const furColors = ['215,215,210', '168,165,158', '90,82,72', '240,238,228'];
+    const furCount = 3 + Math.floor(intensity * 3);
+    for (let i = 0; i < furCount; i++) {
+      emitParticles(x, y, 1, {
+        color: furColors[(Math.random() * furColors.length) | 0],
+        speedMin: 12,
+        speedMax: 34,
+        sizeMin: 1.6,
+        sizeMax: 2.8,
+        lifeMin: 520,
+        lifeMax: 880,
+        spread: Math.PI * 0.85,
+        angle: -Math.PI / 2,
+        gravity: 28,
+        drag: 0.93,
+        shape: 'fur',
+      });
+    }
   }
 
   function spawnImpactBurst(x, y, mode) {
@@ -970,7 +946,7 @@ window.addEventListener('error', (e) => {
     if (input.onCanvas && brushSpeed > 1.2 && game.ghostCooldown <= 0) {
       const angle = Math.max(-0.6, Math.min(0.6, input.moveVX * 0.04));
       const strength = clamp(brushSpeed / 14, 0, 1);
-      pushCombGhost(input.x, input.y, angle, 200 + strength * 30, strength);
+      pushCombGhost(input.x, input.y, angle, 140 + strength * 21, strength);
       game.ghostCooldown = input.down ? 18 : 34;
     }
 
@@ -1147,6 +1123,7 @@ window.addEventListener('error', (e) => {
     }
     startBtn.textContent = 'Try Again';
     overlay.classList.add('show');
+    overlay.classList.toggle('bitten', game.endReason === 'bite');
     stateEl.textContent = '';
   }
 
@@ -1173,7 +1150,7 @@ window.addEventListener('error', (e) => {
     particles.length = 0;
     combGhosts.length = 0;
     game.running = true;
-    overlay.classList.remove('show');
+    overlay.classList.remove('show', 'bitten');
     setState(STATE.SAFE);
   }
 
@@ -1259,22 +1236,7 @@ window.addEventListener('error', (e) => {
       ctx.restore();
     }
 
-    if (drawSprite('comb', x, y, 200, angle, true, scaleX, scaleY)) {
-      if (speed > 2 || input.down) {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(angle);
-        ctx.strokeStyle = `rgba(255, 244, 212, ${0.22 + clamp(speed / 30, 0, 0.25)})`;
-        ctx.lineWidth = 2;
-        for (let i = 0; i < 3; i++) {
-          const offset = -20 + i * 14;
-          ctx.beginPath();
-          ctx.moveTo(offset, 18);
-          ctx.lineTo(offset - input.moveVX * 0.25, 34 + clamp(speed / 3, 0, 10));
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
+    if (drawSprite('comb', x, y, 140, angle, true, scaleX, scaleY)) {
       return;
     }
 
@@ -1413,9 +1375,31 @@ window.addEventListener('error', (e) => {
         ctx.fillRect(0, 0, w, h);
         ctx.restore();
       } else if (state === STATE.BITING) {
-        const fade = Math.max(0, 1 - game.stateTimer / 700);
         ctx.save();
-        ctx.fillStyle = `rgba(220, 30, 30, ${0.42 * fade})`;
+        // 1) Short red "damage" flash at the moment of contact (0-280ms).
+        const flashT = Math.max(0, 1 - game.stateTimer / 280);
+        if (flashT > 0) {
+          ctx.fillStyle = `rgba(220, 30, 30, ${0.55 * flashT})`;
+          ctx.fillRect(0, 0, w, h);
+        }
+        // 2) Slow fade to full black (320ms → ~2100ms). Canvas is basically
+        //    black by the time endRun() fires at 2400ms and reveals the overlay.
+        const blackT = clamp((game.stateTimer - 320) / 1780, 0, 1);
+        if (blackT > 0) {
+          ctx.fillStyle = `rgba(0, 0, 0, ${blackT})`;
+          ctx.fillRect(0, 0, w, h);
+        }
+        // 3) Red edge vignette — drawn LAST so it stays visible through the
+        //    black fade, giving the screen a "wounded" glow that persists.
+        const vigT = clamp(game.stateTimer / 420, 0, 1);
+        const vignette = ctx.createRadialGradient(
+          w / 2, h / 2, Math.min(w, h) * 0.22,
+          w / 2, h / 2, Math.max(w, h) * 0.72,
+        );
+        vignette.addColorStop(0, 'rgba(180, 20, 20, 0)');
+        vignette.addColorStop(0.55, `rgba(180, 20, 20, ${0.2 * vigT})`);
+        vignette.addColorStop(1, `rgba(220, 40, 40, ${0.72 * vigT})`);
+        ctx.fillStyle = vignette;
         ctx.fillRect(0, 0, w, h);
         ctx.restore();
       } else if (state === STATE.WON) {

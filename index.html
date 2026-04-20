@@ -108,6 +108,11 @@
     display: flex;
     animation: overlayPop 260ms cubic-bezier(0.2, 0.9, 0.25, 1.15);
   }
+  /* Bite ending: slow fade-in over an already-black canvas. Override the
+     quick pop so the Bitten title / score emerge gently. */
+  #overlay.show.bitten {
+    animation: overlayBittenFade 900ms ease-out;
+  }
   #overlay::before {
     content: "";
     position: absolute;
@@ -176,6 +181,10 @@
       opacity: 1;
       transform: scale(1);
     }
+  }
+  @keyframes overlayBittenFade {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
   }
   @media (max-width: 700px) {
     #hud {
