@@ -970,7 +970,7 @@ window.addEventListener('error', (e) => {
     if (input.onCanvas && brushSpeed > 1.2 && game.ghostCooldown <= 0) {
       const angle = Math.max(-0.6, Math.min(0.6, input.moveVX * 0.04));
       const strength = clamp(brushSpeed / 14, 0, 1);
-      pushCombGhost(input.x, input.y, angle, 80 + strength * 12, strength);
+      pushCombGhost(input.x, input.y, angle, 120 + strength * 18, strength);
       game.ghostCooldown = input.down ? 18 : 34;
     }
 
@@ -1243,7 +1243,7 @@ window.addEventListener('error', (e) => {
 
     for (const ghost of combGhosts) {
       const alpha = clamp(ghost.life / ghost.maxLife, 0, 1) * 0.2;
-      drawSprite('comb', ghost.x, ghost.y, ghost.size, ghost.angle, false, ghost.scale, ghost.scale, alpha);
+      drawSprite('comb', ghost.x, ghost.y, ghost.size, ghost.angle + Math.PI, false, ghost.scale, ghost.scale, alpha);
     }
 
     if (game.brushGlow > 0.04) {
@@ -1259,11 +1259,11 @@ window.addEventListener('error', (e) => {
       ctx.restore();
     }
 
-    if (drawSprite('comb', x, y, 80, angle, false, scaleX, scaleY)) {
+    if (drawSprite('comb', x, y, 120, angle + Math.PI, false, scaleX, scaleY)) {
       if (speed > 2 || input.down) {
         ctx.save();
         ctx.translate(x, y);
-        ctx.rotate(angle);
+        ctx.rotate(angle + Math.PI);
         ctx.strokeStyle = `rgba(255, 244, 212, ${0.22 + clamp(speed / 30, 0, 0.25)})`;
         ctx.lineWidth = 2;
         for (let i = 0; i < 3; i++) {
