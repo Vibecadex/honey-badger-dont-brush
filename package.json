@@ -1,0 +1,24 @@
+{
+  "name": "honey-badger-dont-brush",
+  "version": "1.0.0",
+  "description": "",
+  "main": "game.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vibecadex/honey-badger-dont-brush.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Vibecadex/honey-badger-dont-brush/issues"
+  },
+  "homepage": "https://github.com/Vibecadex/honey-badger-dont-brush#readme",
+  "dependencies": {
+    "playwright": "^1.59.1"
+  }
+}
