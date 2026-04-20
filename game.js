@@ -17,6 +17,9 @@ window.addEventListener('error', (e) => {
   const overTitle = document.getElementById('overTitle');
   const overSub = document.getElementById('overSub');
   const startBtn = document.getElementById('startBtn');
+  const scorePanel = scoreEl.parentElement;
+  const goalPanel = goalEl.parentElement;
+  const bestPanel = bestEl.parentElement;
 
   // ----- Responsive canvas -----
   function fitCanvas() {
@@ -34,7 +37,7 @@ window.addEventListener('error', (e) => {
   window.addEventListener('resize', fitCanvas);
   fitCanvas();
 
-  // ----- Sprite / asset loader (art-upgrade scaffold) -----
+  // ----- Sprite / asset loader -----
   // Drop PNGs with these filenames into /assets and they'll replace the placeholder shapes.
   // Each slot is optional — missing slots fall back to the shape renderer. Until any sprite
   // loads, everything renders exactly as before.
@@ -66,7 +69,7 @@ window.addEventListener('error', (e) => {
     }
   }
   // Helper for drawing a sprite at (x, y) with optional width/rotation.
-  function drawSprite(slot, x, y, width, rotation = 0, flipX = false) {
+  function drawSprite(slot, x, y, width, rotation = 0, flipX = false, scaleX = 1, scaleY = 1, alpha = 1) {
     const img = sprites[slot];
     if (!img) return false;
     const def = SPRITE_SLOTS[slot];
@@ -75,8 +78,9 @@ window.addEventListener('error', (e) => {
     const h = width * aspect;
     ctx.save();
     ctx.translate(x, y);
+    ctx.globalAlpha *= alpha;
     if (rotation) ctx.rotate(rotation);
-    if (flipX) ctx.scale(-1, 1);
+    ctx.scale(flipX ? -scaleX : scaleX, scaleY);
     // Optional mask — hides rectangular photo backgrounds.
     if (def.clip === 'ellipse') {
       ctx.beginPath();
@@ -126,6 +130,202 @@ window.addEventListener('error', (e) => {
     buf.width = tw; buf.height = th;
     _softBuffers.push(buf);
     return buf;
+  }
+
+  const particles = [];
+  const combGhosts = [];
+
+  function clamp(v, lo, hi) {
+    return Math.max(lo, Math.min(hi, v));
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function kickShake(amount) {
+    game.shake = Math.max(game.shake, amount);
+  }
+
+  function triggerFreeze(ms) {
+    game.freezeTimer = Math.max(game.freezeTimer, ms);
+  }
+
+  function emitParticles(x, y, count, options = {}) {
+    const {
+      color = '255,230,170',
+      speedMin = 30,
+      speedMax = 120,
+      sizeMin = 3,
+      sizeMax = 8,
+      lifeMin = 180,
+      lifeMax = 420,
+      spread = Math.PI,
+      angle = -Math.PI / 2,
+      gravity = 0,
+      drag = 0.92,
+      shape = 'circle',
+    } = options;
+
+    for (let i = 0; i < count; i++) {
+      const theta = angle + (Math.random() - 0.5) * spread;
+      const speed = speedMin + Math.random() * (speedMax - speedMin);
+      const life = lifeMin + Math.random() * (lifeMax - lifeMin);
+      particles.push({
+        x,
+        y,
+        vx: Math.cos(theta) * speed,
+        vy: Math.sin(theta) * speed,
+        life,
+        maxLife: life,
+        size: sizeMin + Math.random() * (sizeMax - sizeMin),
+        gravity,
+        drag,
+        color,
+        shape,
+      });
+    }
+  }
+
+  function spawnBrushBurst(x, y, intensity) {
+    const n = 2 + Math.floor(intensity * 4);
+    emitParticles(x, y, n, {
+      color: '255,227,179',
+      speedMin: 20,
+      speedMax: 90 + intensity * 60,
+      sizeMin: 2,
+      sizeMax: 5 + intensity * 2,
+      lifeMin: 140,
+      lifeMax: 260,
+      spread: Math.PI * 0.9,
+      angle: -Math.PI / 2,
+      gravity: 10,
+      drag: 0.88,
+    });
+    emitParticles(x, y, 1 + Math.floor(intensity * 2), {
+      color: '184,136,88',
+      speedMin: 18,
+      speedMax: 65,
+      sizeMin: 3,
+      sizeMax: 6,
+      lifeMin: 180,
+      lifeMax: 320,
+      spread: Math.PI * 1.2,
+      angle: -Math.PI / 2,
+      gravity: 16,
+      drag: 0.9,
+    });
+  }
+
+  function spawnImpactBurst(x, y, mode) {
+    if (mode === 'win') {
+      emitParticles(x, y, 20, {
+        color: '255,223,120',
+        speedMin: 40,
+        speedMax: 200,
+        sizeMin: 3,
+        sizeMax: 9,
+        lifeMin: 260,
+        lifeMax: 650,
+        spread: Math.PI * 2,
+        angle: 0,
+        gravity: -10,
+        drag: 0.94,
+        shape: 'spark',
+      });
+      return;
+    }
+    emitParticles(x, y, 18, {
+      color: '255,180,120',
+      speedMin: 45,
+      speedMax: 210,
+      sizeMin: 3,
+      sizeMax: 9,
+      lifeMin: 180,
+      lifeMax: 420,
+      spread: Math.PI * 2,
+      angle: 0,
+      gravity: 28,
+      drag: 0.9,
+      shape: 'spark',
+    });
+  }
+
+  function pushCombGhost(x, y, angle, size, strength) {
+    combGhosts.push({
+      x,
+      y,
+      angle,
+      size,
+      life: 60 + strength * 90,
+      maxLife: 60 + strength * 90,
+      scale: 0.92 + strength * 0.18,
+    });
+    while (combGhosts.length > 10) combGhosts.shift();
+  }
+
+  function updateTransientLists(rawDt) {
+    const sec = rawDt / 1000;
+
+    for (let i = combGhosts.length - 1; i >= 0; i--) {
+      const ghost = combGhosts[i];
+      ghost.life -= rawDt;
+      ghost.scale *= 0.995;
+      if (ghost.life <= 0) combGhosts.splice(i, 1);
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= rawDt;
+      if (p.life <= 0) {
+        particles.splice(i, 1);
+        continue;
+      }
+      p.vx *= Math.pow(p.drag, sec * 60);
+      p.vy = p.vy * Math.pow(p.drag, sec * 60) + p.gravity * sec;
+      p.x += p.vx * sec;
+      p.y += p.vy * sec;
+    }
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      const t = p.life / p.maxLife;
+      ctx.save();
+      ctx.globalAlpha = clamp(t * t * 1.1, 0, 1);
+      ctx.fillStyle = `rgba(${p.color},${0.95 * t})`;
+      ctx.strokeStyle = `rgba(${p.color},${0.7 * t})`;
+      if (p.shape === 'spark') {
+        ctx.lineWidth = Math.max(1.2, p.size * 0.22);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(0.8, p.size * (0.35 + t * 0.65)), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  function updateHudFeel() {
+    scorePanel.style.transform = `translateY(${-game.scorePulse * 6}px) scale(${1 + game.scorePulse * 0.16})`;
+    scorePanel.style.filter = `brightness(${1 + game.scorePulse * 0.35})`;
+
+    goalPanel.style.transform = `translateY(${-game.goalPulse * 4}px) scale(${1 + game.goalPulse * 0.12})`;
+    goalPanel.style.filter = `brightness(${1 + game.goalPulse * 0.18})`;
+
+    bestPanel.style.transform = `translateY(${-game.flash * 2}px) scale(${1 + game.flash * 0.06})`;
+
+    const danger = game.dangerPulse;
+    stateEl.style.transform = `translateX(-50%) scale(${1 + game.statePulse * 0.18 + danger * 0.06})`;
+    stateEl.style.opacity = String(0.45 + game.statePulse * 0.22 + danger * 0.24);
+    stateEl.style.letterSpacing = `${danger * 0.08}em`;
+    stateEl.style.color = danger > 0.08
+      ? `rgba(255, ${Math.round(232 - danger * 64)}, ${Math.round(220 - danger * 124)}, 1)`
+      : 'rgba(255,255,255,0.82)';
   }
 
   // ----- Audio (procedural, no assets) -----
@@ -484,6 +684,18 @@ window.addEventListener('error', (e) => {
     best: loadBest(),
     running: false,
     shake: 0,
+    freezeTimer: 0,
+    flash: 0,
+    scorePulse: 0,
+    goalPulse: 0,
+    statePulse: 0,
+    dangerPulse: 0,
+    brushGlow: 0,
+    badgerKick: 0,
+    bgShiftX: 0,
+    bgShiftY: 0,
+    ghostCooldown: 0,
+    brushBurstCooldown: 0,
     afkTimer: 0,
     endReason: null, // 'bite' | 'afk' | 'win'
     winTarget: 0,
@@ -538,19 +750,34 @@ window.addEventListener('error', (e) => {
     const prev = game.state;
     game.state = s;
     game.stateTimer = 0;
+    game.statePulse = Math.max(game.statePulse, 0.45);
     if (s === STATE.SAFE) {
       nextTimings = getTimings(game.score);
       scheduleGlance(nextTimings.safe);
+      game.goalPulse = Math.max(game.goalPulse, 0.14);
       // If coming back from a real look, animate the head swinging away.
       if (prev === STATE.WATCHING || prev === STATE.TURNING) {
         game.returnAnim.active = true;
         game.returnAnim.t = 0;
         game.returnAnim.dur = 280 + Math.random() * 160;
         game.returnAnim.from = 0.9;
+        kickShake(0.14);
       }
     }
-    if (s === STATE.TURNING) playHiss();
-    if (s === STATE.WATCHING) playSnarl();
+    if (s === STATE.TURNING) {
+      playHiss();
+      game.dangerPulse = Math.max(game.dangerPulse, 0.45);
+      game.badgerKick = Math.max(game.badgerKick, 0.14);
+      kickShake(0.18);
+    }
+    if (s === STATE.WATCHING) {
+      playSnarl();
+      game.dangerPulse = 1;
+      game.flash = Math.max(game.flash, 0.16);
+      kickShake(0.26);
+      const b = badger();
+      spawnImpactBurst(b.cx + b.bodyRx * 0.38, b.cy - b.bodyRy * 0.08, 'watch');
+    }
   }
 
   // Decide if/when a fake glance fires during this SAFE window.
@@ -652,11 +879,14 @@ window.addEventListener('error', (e) => {
     // body ellipse hit-test
     const nx = (x - b.cx) / b.bodyRx;
     const ny = (y - b.cy) / b.bodyRy;
-    if (nx * nx + ny * ny <= 1.1) return true;
-    // head region (varies by state, but give generous hit)
-    const hx = b.cx - b.bodyRx * 0.75;
-    const hy = b.cy - b.bodyRy * 0.15;
-    return Math.hypot(x - hx, y - hy) <= b.headR * 1.2;
+    if (nx * nx + ny * ny <= 1.28) return true;
+    // Give the sprite art a more forgiving front-half hit region.
+    const hx = b.cx + b.bodyRx * 0.7;
+    const hy = b.cy - b.bodyRy * 0.22;
+    if (Math.hypot(x - hx, y - hy) <= b.headR * 1.35) return true;
+    const shoulderX = b.cx + b.bodyRx * 0.25;
+    const shoulderY = b.cy - b.bodyRy * 0.1;
+    return Math.hypot(x - shoulderX, y - shoulderY) <= b.headR * 1.1;
   }
 
   // ----- Main loop -----
@@ -669,9 +899,47 @@ window.addEventListener('error', (e) => {
     requestAnimationFrame(frame);
   }
 
-  function update(dt) {
-    if (!game.running) { input.brushDelta = 0; return; }
+  function update(rawDt) {
+    const sec = rawDt / 1000;
+    const { w, h } = logical();
+    const brushSpeed = Math.hypot(input.moveVX, input.moveVY);
+    const pointerX = input.onCanvas ? (input.x - w / 2) / w : 0;
+    const pointerY = input.onCanvas ? (input.y - h * 0.58) / h : 0;
 
+    updateTransientLists(rawDt);
+
+    if (game.freezeTimer > 0) game.freezeTimer = Math.max(0, game.freezeTimer - rawDt);
+    if (game.ghostCooldown > 0) game.ghostCooldown -= rawDt;
+    if (game.brushBurstCooldown > 0) game.brushBurstCooldown -= rawDt;
+
+    game.flash = Math.max(0, game.flash - sec * 2.8);
+    game.scorePulse = Math.max(0, game.scorePulse - sec * 4.4);
+    game.goalPulse = Math.max(0, game.goalPulse - sec * 2.6);
+    game.statePulse = Math.max(0, game.statePulse - sec * 2.4);
+    game.brushGlow = Math.max(0, game.brushGlow - sec * 3.6);
+    game.badgerKick = Math.max(0, game.badgerKick - sec * 3.2);
+
+    const dangerTarget = game.state === STATE.WATCHING ? 1 : game.state === STATE.TURNING ? 0.46 : 0;
+    game.dangerPulse = lerp(game.dangerPulse, dangerTarget, clamp(sec * 7.5, 0, 1));
+    game.bgShiftX = lerp(game.bgShiftX, pointerX * 26, clamp(sec * 4.2, 0, 1));
+    game.bgShiftY = lerp(game.bgShiftY, pointerY * 16 - game.dangerPulse * 6, clamp(sec * 4.2, 0, 1));
+
+    if (input.onCanvas && brushSpeed > 1.2 && game.ghostCooldown <= 0) {
+      const angle = Math.max(-0.6, Math.min(0.6, input.moveVX * 0.04));
+      const strength = clamp(brushSpeed / 14, 0, 1);
+      pushCombGhost(input.x, input.y, angle, 80 + strength * 12, strength);
+      game.ghostCooldown = input.down ? 18 : 34;
+    }
+
+    updateHudFeel();
+
+    if (!game.running) {
+      input.brushDelta = 0;
+      stateEl.textContent = '';
+      return;
+    }
+
+    const dt = game.freezeTimer > 0 ? 0 : rawDt;
     game.stateTimer += dt;
     if (game.returnAnim.active) game.returnAnim.t += dt;
 
@@ -712,6 +980,16 @@ window.addEventListener('error', (e) => {
     // (A player who panics and brushes during WATCHING still gets the sound before the bite.)
     if (brushing) playBrushTick(input.brushDelta);
 
+    if (brushing) {
+      const brushFeel = clamp((effectiveBrush + brushSpeed) / 24, 0, 1);
+      game.brushGlow = Math.min(1.25, game.brushGlow + brushFeel * 0.42);
+      game.badgerKick = Math.min(1, game.badgerKick + brushFeel * 0.34);
+      if (game.brushBurstCooldown <= 0) {
+        spawnBrushBurst(input.x, input.y + 8, brushFeel);
+        game.brushBurstCooldown = 18 + (1 - brushFeel) * 38;
+      }
+    }
+
     // AFK watchdog: any active frame without real stroking increments the timer.
     // Real strokes reset it. BITING / WON states excluded (run already ending).
     if (game.state !== STATE.BITING && game.state !== STATE.WON) {
@@ -734,6 +1012,10 @@ window.addEventListener('error', (e) => {
         const gain = brushing ? effectiveBrush * SCORE_COEFF : 0;
         game.score = game.score + gain;
         scoreEl.textContent = Math.floor(game.score);
+        if (gain > 0) {
+          game.scorePulse = Math.min(1.3, game.scorePulse + clamp(gain * 0.16, 0.05, 0.22));
+          game.goalPulse = Math.min(0.8, game.goalPulse + clamp(gain * 0.07, 0.02, 0.08));
+        }
         if (game.score >= game.winTarget) { winRun(); break; }
         if (game.stateTimer >= nextTimings.safe) setState(STATE.TURNING);
         break;
@@ -743,6 +1025,10 @@ window.addEventListener('error', (e) => {
         const gain = brushing ? effectiveBrush * SCORE_COEFF : 0;
         game.score = Math.max(0, game.score + gain);
         scoreEl.textContent = Math.floor(game.score);
+        if (gain > 0) {
+          game.scorePulse = Math.min(1.2, game.scorePulse + clamp(gain * 0.14, 0.04, 0.18));
+          game.goalPulse = Math.min(0.7, game.goalPulse + clamp(gain * 0.06, 0.02, 0.07));
+        }
         if (game.score >= game.winTarget) { winRun(); break; }
         if (game.stateTimer >= nextTimings.turning) setState(STATE.WATCHING);
         break;
@@ -761,6 +1047,11 @@ window.addEventListener('error', (e) => {
         break;
     }
 
+    const progress = game.winTarget > 0 ? clamp(game.score / game.winTarget, 0, 1) : 0;
+    if (progress > 0.72) {
+      game.goalPulse = Math.max(game.goalPulse, (progress - 0.72) * 0.7);
+    }
+
     if (game.shake > 0) game.shake = Math.max(0, game.shake - dt * 0.02);
     input.brushDelta = 0;
     stateEl.textContent = game.state;
@@ -768,8 +1059,13 @@ window.addEventListener('error', (e) => {
 
   function bite() {
     setState(STATE.BITING);
-    game.shake = 1;
+    kickShake(1.5);
+    triggerFreeze(70);
+    game.flash = 0.8;
+    game.statePulse = 1;
     game.endReason = 'bite';
+    const b = badger();
+    spawnImpactBurst(b.cx + b.bodyRx * 0.42, b.cy - b.bodyRy * 0.12, 'bite');
     playBite();
   }
 
@@ -777,6 +1073,12 @@ window.addEventListener('error', (e) => {
     if (game.state === STATE.WON) return;
     setState(STATE.WON);
     game.endReason = 'win';
+    kickShake(0.55);
+    triggerFreeze(55);
+    game.flash = 0.45;
+    game.scorePulse = 1;
+    game.goalPulse = 0.9;
+    spawnImpactBurst(input.onCanvas ? input.x : badger().cx, input.onCanvas ? input.y : badger().cy - 20, 'win');
     playWin();
   }
 
@@ -801,6 +1103,7 @@ window.addEventListener('error', (e) => {
     }
     startBtn.textContent = 'Try Again';
     overlay.classList.add('show');
+    stateEl.textContent = '';
   }
 
   function startRun() {
@@ -815,6 +1118,16 @@ window.addEventListener('error', (e) => {
     scoreEl.textContent = '0';
     goalEl.textContent = String(Math.ceil(game.winTarget));
     bestEl.textContent = game.best;
+    game.freezeTimer = 0;
+    game.flash = 0;
+    game.scorePulse = 0.3;
+    game.goalPulse = 0.35;
+    game.statePulse = 0.45;
+    game.dangerPulse = 0;
+    game.brushGlow = 0;
+    game.badgerKick = 0;
+    particles.length = 0;
+    combGhosts.length = 0;
     game.running = true;
     overlay.classList.remove('show');
     setState(STATE.SAFE);
@@ -833,7 +1146,7 @@ window.addEventListener('error', (e) => {
     // so letterbox strips (when photo aspect ≠ canvas aspect) match the scene.
     ctx.fillStyle = '#7a6440'; // dusty savanna
     ctx.fillRect(0, 0, w, h);
-    if (!drawSprite('background', w / 2, h / 2, w)) {
+    if (!drawSprite('background', w / 2 + game.bgShiftX, h / 2 + game.bgShiftY, w * 1.08)) {
       // No photo — draw the placeholder scene instead.
       ctx.fillStyle = '#2a3d2a';
       ctx.fillRect(0, 0, w, h);
@@ -844,6 +1157,13 @@ window.addEventListener('error', (e) => {
     }
 
     drawBadger();
+    drawParticles();
+    if (game.flash > 0.01) {
+      ctx.save();
+      ctx.fillStyle = `rgba(255, ${Math.round(212 - game.flash * 60)}, ${Math.round(170 - game.flash * 110)}, ${game.flash * 0.18})`;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
     ctx.restore();
 
     drawComb();
@@ -871,13 +1191,48 @@ window.addEventListener('error', (e) => {
   function drawComb() {
     if (!input.onCanvas) return;
     const x = input.x, y = input.y;
-    // Rotation based on recent horizontal motion; bias down so bristles face the badger.
-    const vx = input.moveVX;
-    const tilt = Math.max(-0.5, Math.min(0.5, vx * 0.04));
-    const angle = tilt;
+    const speed = Math.hypot(input.moveVX, input.moveVY);
+    const tilt = Math.max(-0.6, Math.min(0.6, input.moveVX * 0.04));
+    const angle = tilt + (input.down ? input.moveVY * 0.008 : 0);
+    const scaleX = 1 + clamp(speed / 42, 0, 0.22) + game.brushGlow * 0.05;
+    const scaleY = (input.down ? 0.92 : 1) + game.brushGlow * 0.03;
 
-    // Comb sprite takes over entirely when provided.
-    if (drawSprite('comb', x, y, 80, angle)) return;
+    for (const ghost of combGhosts) {
+      const alpha = clamp(ghost.life / ghost.maxLife, 0, 1) * 0.2;
+      drawSprite('comb', ghost.x, ghost.y, ghost.size, ghost.angle, false, ghost.scale, ghost.scale, alpha);
+    }
+
+    if (game.brushGlow > 0.04) {
+      ctx.save();
+      const glow = 22 + game.brushGlow * 32;
+      const grad = ctx.createRadialGradient(x, y, 6, x, y, glow);
+      grad.addColorStop(0, `rgba(255, 226, 170, ${0.16 + game.brushGlow * 0.1})`);
+      grad.addColorStop(1, 'rgba(255, 226, 170, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, glow, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (drawSprite('comb', x, y, 80, angle, false, scaleX, scaleY)) {
+      if (speed > 2 || input.down) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.strokeStyle = `rgba(255, 244, 212, ${0.22 + clamp(speed / 30, 0, 0.25)})`;
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 3; i++) {
+          const offset = -20 + i * 14;
+          ctx.beginPath();
+          ctx.moveTo(offset, 18);
+          ctx.lineTo(offset - input.moveVX * 0.25, 34 + clamp(speed / 3, 0, 10));
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      return;
+    }
 
     ctx.save();
     ctx.translate(x, y);
@@ -946,29 +1301,82 @@ window.addEventListener('error', (e) => {
 
     // ---- PHOTO PATH: body photo loaded — draw body + optional head overlay. ----
     if (sprites.body) {
+      const now = performance.now() * 0.001;
       const biteT = state === STATE.BITING ? Math.min(1, game.stateTimer / 400) : 0;
-      const zoom = 1 + biteT * 0.12;
-      const spriteW = b.bodyRx * (state === STATE.BITING ? 3.15 : 3.0) * zoom;
-      const spriteY = b.cy + b.bodyRy * 1.06;
+      const turnT = state === STATE.TURNING ? Math.min(1, game.stateTimer / Math.max(1, nextTimings.turning)) : 0;
+      const breathe = state === STATE.SAFE
+        ? Math.sin(now * 3.4) * 4
+        : state === STATE.WATCHING
+          ? Math.sin(now * 7.8) * 2.6
+          : 0;
+      let spriteW = b.bodyRx * (state === STATE.BITING ? 3.18 : state === STATE.WATCHING ? 3.06 : 2.98);
+      spriteW *= 1 + biteT * 0.12 + game.badgerKick * 0.05;
+      let spriteX = b.cx;
+      let spriteY = b.cy + b.bodyRy * 1.06 + breathe + game.badgerKick * 8;
+      let rotation = -game.badgerKick * 0.05;
+      let scaleX = 1 + game.badgerKick * 0.08;
+      let scaleY = 1 - game.badgerKick * 0.05;
       let spriteSlot = 'body';
       if (state === STATE.TURNING) spriteSlot = 'head_turning';
       else if (state === STATE.WATCHING) spriteSlot = 'head_watching';
       else if (state === STATE.BITING) spriteSlot = 'head_biting';
 
-      drawSprite(spriteSlot, b.cx, spriteY, spriteW);
+      if (state === STATE.TURNING) {
+        spriteX += turnT * 10;
+        spriteY += turnT * 3;
+        rotation += turnT * 0.08;
+        scaleX += turnT * 0.04;
+      } else if (state === STATE.WATCHING) {
+        spriteX += 7;
+        rotation += Math.sin(now * 9.5) * 0.014;
+        scaleY += Math.sin(now * 9.5) * 0.02;
+      } else if (state === STATE.BITING) {
+        spriteX += 18 * biteT;
+        spriteY -= 10 * biteT;
+        rotation -= 0.08 + biteT * 0.06;
+        scaleX += biteT * 0.12;
+        scaleY -= biteT * 0.08;
+      } else if (state === STATE.WON) {
+        spriteY -= Math.sin(Math.min(1, game.stateTimer / 700) * Math.PI) * 14;
+        rotation += Math.sin(now * 12) * 0.02;
+        scaleX += 0.04;
+        scaleY += 0.03;
+      }
+
+      ctx.save();
+      ctx.globalAlpha = 0.18 + game.dangerPulse * 0.08;
+      ctx.fillStyle = '#1a0f08';
+      ctx.beginPath();
+      ctx.ellipse(spriteX, b.cy + b.bodyRy * 1.1, spriteW * 0.28, b.bodyRy * (0.34 - biteT * 0.08), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      drawSprite(spriteSlot, spriteX, spriteY, spriteW, rotation, false, scaleX, scaleY);
 
       // State tint overlays
       const { w, h } = logical();
+      if (state === STATE.TURNING) {
+        ctx.save();
+        ctx.fillStyle = `rgba(255, 206, 120, ${0.05 + turnT * 0.06})`;
+        ctx.fillRect(0, 0, w, h);
+        ctx.restore();
+      }
       if (state === STATE.WATCHING) {
         const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.012);
         ctx.save();
-        ctx.fillStyle = `rgba(226, 50, 50, ${0.10 + pulse * 0.08})`;
+        ctx.fillStyle = `rgba(226, 50, 50, ${0.12 + pulse * 0.1})`;
         ctx.fillRect(0, 0, w, h);
         ctx.restore();
       } else if (state === STATE.BITING) {
         const fade = Math.max(0, 1 - game.stateTimer / 700);
         ctx.save();
-        ctx.fillStyle = `rgba(220, 30, 30, ${0.35 * fade})`;
+        ctx.fillStyle = `rgba(220, 30, 30, ${0.42 * fade})`;
+        ctx.fillRect(0, 0, w, h);
+        ctx.restore();
+      } else if (state === STATE.WON) {
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.015);
+        ctx.save();
+        ctx.fillStyle = `rgba(255, 221, 120, ${0.1 + pulse * 0.08})`;
         ctx.fillRect(0, 0, w, h);
         ctx.restore();
       }

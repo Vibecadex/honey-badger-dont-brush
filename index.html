@@ -9,13 +9,37 @@
     margin: 0;
     padding: 0;
     height: 100%;
-    background: #1a1a1a;
+    background: #120d0a;
     color: #f0f0f0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     overflow: hidden;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
+  }
+  body {
+    position: relative;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: -28px;
+    background:
+      linear-gradient(180deg, rgba(18,11,8,0.12), rgba(18,11,8,0.68)),
+      url("assets/background.jpg") center center / cover no-repeat;
+    filter: blur(18px) saturate(0.9) brightness(0.56);
+    transform: scale(1.06);
+    z-index: -2;
+  }
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(circle at 50% 34%, rgba(255, 206, 140, 0.18), transparent 34%),
+      radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0), rgba(0,0,0,0.46) 78%);
+    z-index: -1;
+    pointer-events: none;
   }
   #wrap {
     position: fixed;
@@ -41,15 +65,40 @@
     pointer-events: none;
     text-shadow: 0 2px 4px rgba(0,0,0,0.7);
   }
+  #hud > div {
+    transform-origin: center top;
+    will-change: transform, filter;
+    background: rgba(20, 12, 8, 0.48);
+    border: 1px solid rgba(255, 225, 180, 0.1);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.24);
+    border-radius: 999px;
+    padding: 8px 14px;
+    backdrop-filter: blur(8px);
+  }
+  #hud span {
+    display: inline-block;
+    transform-origin: center center;
+    will-change: transform, filter;
+  }
   #state {
     position: fixed;
     top: 50px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 14px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
     opacity: 0.6;
     pointer-events: none;
     text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+    will-change: transform, opacity, letter-spacing, color;
+    background: rgba(20, 12, 8, 0.42);
+    border: 1px solid rgba(255, 225, 180, 0.08);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.22);
+    border-radius: 999px;
+    padding: 8px 14px;
+    backdrop-filter: blur(8px);
   }
   #overlay {
     position: fixed;
@@ -61,10 +110,41 @@
     flex-direction: column;
     gap: 16px;
     z-index: 10;
+    backdrop-filter: blur(8px);
   }
-  #overlay.show { display: flex; }
-  #overlay h1 { margin: 0; font-size: 42px; }
-  #overlay p { margin: 0; font-size: 18px; opacity: 0.85; }
+  #overlay.show {
+    display: flex;
+    animation: overlayPop 260ms cubic-bezier(0.2, 0.9, 0.25, 1.15);
+  }
+  #overlay::before {
+    content: "";
+    position: absolute;
+    width: min(560px, calc(100vw - 40px));
+    height: min(340px, calc(100vh - 120px));
+    border-radius: 28px;
+    background:
+      linear-gradient(180deg, rgba(38, 24, 16, 0.68), rgba(18, 12, 8, 0.5));
+    border: 1px solid rgba(255, 225, 180, 0.1);
+    box-shadow: 0 26px 80px rgba(0,0,0,0.36);
+  }
+  #overlay > * {
+    position: relative;
+    z-index: 1;
+  }
+  #overlay h1 {
+    margin: 0;
+    font-size: clamp(42px, 7vw, 68px);
+    text-shadow: 0 10px 28px rgba(0,0,0,0.35);
+  }
+  #overlay p {
+    margin: 0;
+    font-size: clamp(18px, 2.8vw, 24px);
+    opacity: 0.85;
+    text-shadow: 0 6px 18px rgba(0,0,0,0.3);
+    max-width: min(520px, calc(100vw - 72px));
+    text-align: center;
+    line-height: 1.4;
+  }
   #overlay button {
     background: #e8b34a;
     color: #1a1a1a;
@@ -74,8 +154,49 @@
     font-weight: 600;
     border-radius: 6px;
     cursor: pointer;
+    box-shadow: 0 12px 28px rgba(232,179,74,0.28);
+    transition: transform 100ms ease, box-shadow 100ms ease, filter 100ms ease, background 100ms ease;
   }
-  #overlay button:hover { background: #f3c15b; }
+  #overlay button:hover {
+    background: #f3c15b;
+    transform: translateY(-1px) scale(1.04);
+    box-shadow: 0 16px 34px rgba(243,193,91,0.36);
+  }
+  #overlay button:active {
+    transform: translateY(1px) scale(0.98);
+    box-shadow: 0 7px 16px rgba(232,179,74,0.22);
+  }
+  @keyframes overlayPop {
+    0% {
+      opacity: 0;
+      transform: scale(0.94);
+    }
+    65% {
+      opacity: 1;
+      transform: scale(1.02);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @media (max-width: 700px) {
+    #hud {
+      font-size: 16px;
+    }
+    #hud > div {
+      padding: 7px 12px;
+    }
+    #state {
+      top: 58px;
+      font-size: 13px;
+      padding: 7px 11px;
+    }
+    #overlay::before {
+      width: calc(100vw - 28px);
+      height: min(300px, calc(100vh - 160px));
+    }
+  }
 </style>
 </head>
 <body>
