@@ -57,7 +57,7 @@ window.addEventListener('error', (e) => {
     head_watching:  { src: 'assets/Badger_lockedOn.png',       anchor: { x: 0.5, y: 1.0 } },
     head_biting:    { src: 'assets/Badger_Pounce.png',         anchor: { x: 0.5, y: 1.0 } },
     head_jumpscare: { src: 'assets/Badger_Jumpscare.png',      anchor: { x: 0.5, y: 1.0 } },
-    comb:           { src: 'assets/brush_sprite.png',          anchor: { x: 0.5, y: 0.5 } },
+    comb:           { src: 'assets/Comb_angle.png',            anchor: { x: 0.82, y: 0.88 } },
     background:     { src: 'assets/background_painted.png',    anchor: { x: 0.5, y: 0.5 } },
   };
   const sprites = {}; // slot -> HTMLImageElement once loaded
@@ -198,42 +198,43 @@ window.addEventListener('error', (e) => {
   function spawnBrushBurst(x, y, intensity) {
     const n = 3 + Math.floor(intensity * 6);
     emitParticles(x, y, n, {
-      color: '255,227,179',
-      speedMin: 20,
-      speedMax: 90 + intensity * 60,
-      sizeMin: 2,
-      sizeMax: 5 + intensity * 2,
-      lifeMin: 140,
-      lifeMax: 260,
+      color: '255,238,195',
+      speedMin: 24,
+      speedMax: 110 + intensity * 70,
+      sizeMin: 3.2,
+      sizeMax: 7 + intensity * 3,
+      lifeMin: 220,
+      lifeMax: 380,
       spread: Math.PI * 0.9,
       angle: -Math.PI / 2,
       gravity: 10,
       drag: 0.88,
     });
     emitParticles(x, y, 2 + Math.floor(intensity * 3), {
-      color: '184,136,88',
-      speedMin: 18,
-      speedMax: 65,
-      sizeMin: 3,
-      sizeMax: 6,
-      lifeMin: 180,
-      lifeMax: 320,
+      color: '224,168,96',
+      speedMin: 20,
+      speedMax: 75,
+      sizeMin: 4,
+      sizeMax: 8,
+      lifeMin: 260,
+      lifeMax: 440,
       spread: Math.PI * 1.2,
       angle: -Math.PI / 2,
       gravity: 16,
       drag: 0.9,
     });
-    // Fur shed: 2-3 tufts per burst in the badger's own coat colours.
-    const furColors = ['215,215,212', '168,165,158', '70,62,55', '245,242,232'];
+    // Fur shed: 2-3 tufts per burst in the badger's own coat colours — bigger
+    // strands and longer life so the shedding cue is actually readable.
+    const furColors = ['235,235,232', '188,185,178', '90,82,72', '250,248,240'];
     const furCount = 2 + (Math.random() < intensity * 0.65 ? 1 : 0);
     emitParticles(x, y, furCount, {
       color: furColors[(Math.random() * furColors.length) | 0],
-      speedMin: 8,
-      speedMax: 28,
-      sizeMin: 2.4,
-      sizeMax: 4.2,
-      lifeMin: 520,
-      lifeMax: 920,
+      speedMin: 10,
+      speedMax: 34,
+      sizeMin: 3.6,
+      sizeMax: 6.4,
+      lifeMin: 700,
+      lifeMax: 1100,
       spread: Math.PI * 0.7,
       angle: -Math.PI / 2,
       gravity: 32,
@@ -317,29 +318,35 @@ window.addEventListener('error', (e) => {
     for (const p of particles) {
       const t = p.life / p.maxLife;
       ctx.save();
-      ctx.globalAlpha = clamp(t * t * 1.1, 0, 1);
-      ctx.fillStyle = `rgba(${p.color},${0.95 * t})`;
-      ctx.strokeStyle = `rgba(${p.color},${0.7 * t})`;
+      // Single alpha control: stay fully opaque for the first ~33% of life,
+      // then fade out linearly. Previously globalAlpha AND fillStyle alpha
+      // were both multiplied by t, which double-attenuated the opacity and
+      // made particles almost invisible past the first few frames.
+      ctx.globalAlpha = clamp(t * 1.5, 0, 1);
+      ctx.fillStyle = `rgba(${p.color},1)`;
+      ctx.strokeStyle = `rgba(${p.color},1)`;
       if (p.shape === 'spark') {
-        ctx.lineWidth = Math.max(1.2, p.size * 0.22);
+        ctx.lineWidth = Math.max(1.4, p.size * 0.28);
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025);
         ctx.stroke();
       } else if (p.shape === 'fur') {
         const rot = Math.atan2(p.vy, p.vx);
-        const len = Math.max(2, p.size * 1.4);
+        const len = Math.max(3, p.size * 1.6);
         ctx.translate(p.x, p.y);
         ctx.rotate(rot);
-        ctx.lineWidth = Math.max(0.7, p.size * 0.35);
+        ctx.lineWidth = Math.max(1.4, p.size * 0.55);
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(-len * 0.5, 0);
         ctx.lineTo(len * 0.5, 0);
         ctx.stroke();
       } else {
+        // Keep particles at 75-100% of their authored size across their life
+        // so they stay readable instead of shrinking to nothing.
         ctx.beginPath();
-        ctx.arc(p.x, p.y, Math.max(0.8, p.size * (0.35 + t * 0.65)), 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, Math.max(1, p.size * (0.75 + t * 0.25)), 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -963,7 +970,7 @@ window.addEventListener('error', (e) => {
     if (input.onCanvas && brushSpeed > 1.2 && game.ghostCooldown <= 0) {
       const angle = Math.max(-0.6, Math.min(0.6, input.moveVX * 0.04));
       const strength = clamp(brushSpeed / 14, 0, 1);
-      pushCombGhost(input.x, input.y, angle, 80 + strength * 12, strength);
+      pushCombGhost(input.x, input.y, angle, 200 + strength * 30, strength);
       game.ghostCooldown = input.down ? 18 : 34;
     }
 
@@ -1236,7 +1243,7 @@ window.addEventListener('error', (e) => {
 
     for (const ghost of combGhosts) {
       const alpha = clamp(ghost.life / ghost.maxLife, 0, 1) * 0.2;
-      drawSprite('comb', ghost.x, ghost.y, ghost.size, ghost.angle, false, ghost.scale, ghost.scale, alpha);
+      drawSprite('comb', ghost.x, ghost.y, ghost.size, ghost.angle, true, ghost.scale, ghost.scale, alpha);
     }
 
     if (game.brushGlow > 0.04) {
@@ -1252,7 +1259,7 @@ window.addEventListener('error', (e) => {
       ctx.restore();
     }
 
-    if (drawSprite('comb', x, y, 80, angle, false, scaleX, scaleY)) {
+    if (drawSprite('comb', x, y, 200, angle, true, scaleX, scaleY)) {
       if (speed > 2 || input.down) {
         ctx.save();
         ctx.translate(x, y);
