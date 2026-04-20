@@ -196,7 +196,7 @@ window.addEventListener('error', (e) => {
   }
 
   function spawnBrushBurst(x, y, intensity) {
-    const n = 2 + Math.floor(intensity * 4);
+    const n = 3 + Math.floor(intensity * 6);
     emitParticles(x, y, n, {
       color: '255,227,179',
       speedMin: 20,
@@ -210,7 +210,7 @@ window.addEventListener('error', (e) => {
       gravity: 10,
       drag: 0.88,
     });
-    emitParticles(x, y, 1 + Math.floor(intensity * 2), {
+    emitParticles(x, y, 2 + Math.floor(intensity * 3), {
       color: '184,136,88',
       speedMin: 18,
       speedMax: 65,
@@ -223,9 +223,9 @@ window.addEventListener('error', (e) => {
       gravity: 16,
       drag: 0.9,
     });
-    // Gentle fur shed: 1-2 tufts per burst in the badger's own coat colours.
+    // Fur shed: 2-3 tufts per burst in the badger's own coat colours.
     const furColors = ['215,215,212', '168,165,158', '70,62,55', '245,242,232'];
-    const furCount = 1 + (Math.random() < intensity * 0.6 ? 1 : 0);
+    const furCount = 2 + (Math.random() < intensity * 0.65 ? 1 : 0);
     emitParticles(x, y, furCount, {
       color: furColors[(Math.random() * furColors.length) | 0],
       speedMin: 8,
