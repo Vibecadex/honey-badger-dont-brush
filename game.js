@@ -13,7 +13,8 @@ window.addEventListener("error", (e) => {
   const scoreEl = document.getElementById("score");
   const bestEl = document.getElementById("best");
   const goalEl = document.getElementById("goal");
-  const stateEl = document.getElementById("state");
+  // #state badge removed 2026-04-20 — danger reads entirely from the
+  // badger posture / screen tints. No more DOM writes per frame.
   const overlay = document.getElementById("overlay");
   const overTitle = document.getElementById("overTitle");
   const overSub = document.getElementById("overSub");
@@ -265,24 +266,10 @@ window.addEventListener("error", (e) => {
     }
   }
 
-  function spawnImpactBurst(x, y, mode) {
-    if (mode === "win") {
-      emitParticles(x, y, 20, {
-        color: "255,223,120",
-        speedMin: 40,
-        speedMax: 200,
-        sizeMin: 3,
-        sizeMax: 9,
-        lifeMin: 260,
-        lifeMax: 650,
-        spread: Math.PI * 2,
-        angle: 0,
-        gravity: -10,
-        drag: 0.94,
-        shape: "spark",
-      });
-      return;
-    }
+  // Bite / watch impact burst — red-warm spark scatter. Previously had a
+  // 'win' branch that emitted yellow celebratory sparks; removed with the
+  // WON state since infinite play has no win condition.
+  function spawnImpactBurst(x, y) {
     emitParticles(x, y, 18, {
       color: "255,180,120",
       speedMin: 45,
@@ -386,17 +373,6 @@ window.addEventListener("error", (e) => {
     goalPanel.style.filter = `brightness(${1 + game.goalPulse * 0.18})`;
 
     bestPanel.style.transform = `translateY(${-game.flash * 2}px) scale(${1 + game.flash * 0.06})`;
-
-    const danger = game.dangerPulse;
-    stateEl.style.transform = `translateX(-50%) scale(${1 + game.statePulse * 0.18 + danger * 0.06})`;
-    stateEl.style.opacity = String(
-      0.45 + game.statePulse * 0.22 + danger * 0.24,
-    );
-    stateEl.style.letterSpacing = `${danger * 0.08}em`;
-    stateEl.style.color =
-      danger > 0.08
-        ? `rgba(255, ${Math.round(232 - danger * 64)}, ${Math.round(220 - danger * 124)}, 1)`
-        : "rgba(255,255,255,0.82)";
   }
 
   // ----- Audio (procedural, no assets) -----
@@ -708,28 +684,6 @@ window.addEventListener("error", (e) => {
     n.stop(now + 0.25);
   }
 
-  // ===== WIN ===== ascending bright chime — three tones staggered.
-  function playWin() {
-    const a = initAudio();
-    if (!a) return;
-    const { actx, master } = a;
-    const now = actx.currentTime;
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
-    notes.forEach((f, i) => {
-      const t = now + i * 0.11;
-      const osc = actx.createOscillator();
-      osc.type = "triangle";
-      osc.frequency.value = f;
-      const g = actx.createGain();
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.28, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
-      osc.connect(g).connect(master);
-      osc.start(t);
-      osc.stop(t + 0.6);
-    });
-  }
-
   // ===== BRUSH ===== velocity-driven short noise bursts while comb moves on fur.
   let lastBrushAt = 0;
   function playBrushTick(velocity) {
@@ -765,12 +719,13 @@ window.addEventListener("error", (e) => {
   }
 
   // ----- Game state -----
+  // Infinite-play design: no WON state. Runs end on bite or AFK only.
+  // Goal crossings pulse the UI but don't transition the state machine.
   const STATE = {
     SAFE: "SAFE",
     TURNING: "TURNING",
     WATCHING: "WATCHING",
     BITING: "BITING",
-    WON: "WON",
     IDLE: "IDLE",
   };
 
@@ -924,8 +879,6 @@ window.addEventListener("error", (e) => {
   const LS_KEYS = {
     difficulty: "tamebadger.difficulty",
     knobs: "tamebadger.knobs",
-    telemetry: "tamebadger.telemetry",
-    telemetryFlag: "tamebadger.telemetry.enabled",
     scalerOverlay: "tamebadger.scaler.overlay",
   };
 
@@ -972,10 +925,7 @@ window.addEventListener("error", (e) => {
       urlDiff in DIFFICULTY_PRESETS
         ? urlDiff
         : localStorage.getItem(LS_KEYS.difficulty) || "NORMAL";
-    const telemetryEnabled =
-      p.get("telemetry") === "1" ||
-      localStorage.getItem(LS_KEYS.telemetryFlag) === "1";
-    return { difficulty, telemetryEnabled };
+    return { difficulty };
   }
 
   const RUNTIME_FLAGS = parseRuntimeFlags();
@@ -1093,7 +1043,7 @@ window.addEventListener("error", (e) => {
       _archetypeScratch.WATCHING_ARCHETYPES, loPreset.WATCHING_ARCHETYPES, hiPreset.WATCHING_ARCHETYPES, t,
     );
 
-    // Exposed for the scaler overlay / telemetry.
+    // Exposed for the scaler overlay readout.
     game._progressionTierFloat = loIdx + (hiIdx - loIdx) * t;
     game._progressionLoTier = PROGRESSION_TIERS[loIdx];
     game._progressionHiTier = PROGRESSION_TIERS[hiIdx];
@@ -1366,7 +1316,7 @@ window.addEventListener("error", (e) => {
       game.flash = Math.max(game.flash, 0.16);
       kickShake(0.26);
       const b = badger();
-      spawnImpactBurst(b.cx + b.bodyRx * 0.38, b.cy - b.bodyRy * 0.08, "watch");
+      spawnImpactBurst(b.cx + b.bodyRx * 0.38, b.cy - b.bodyRy * 0.08);
     }
   }
 
@@ -1564,7 +1514,6 @@ window.addEventListener("error", (e) => {
 
     if (!game.running) {
       input.brushDelta = 0;
-      stateEl.textContent = "";
       return;
     }
 
@@ -1622,9 +1571,9 @@ window.addEventListener("error", (e) => {
       }
     }
 
-    // AFK watchdog: any active frame without real stroking increments the timer.
-    // Real strokes reset it. BITING / WON states excluded (run already ending).
-    if (game.state !== STATE.BITING && game.state !== STATE.WON) {
+    // AFK watchdog: any active frame without real stroking increments the
+    // timer. Real strokes reset it. BITING excluded (run already ending).
+    if (game.state !== STATE.BITING) {
       if (brushing) {
         game.afkTimer = 0;
       } else {
@@ -1699,10 +1648,6 @@ window.addEventListener("error", (e) => {
       case STATE.BITING:
         if (game.stateTimer >= config.BITING_HOLD_MS) endRun();
         break;
-      case STATE.WON:
-        // Brief celebration pause before the overlay.
-        if (game.stateTimer >= 1400) endRun();
-        break;
     }
 
     const progress =
@@ -1713,7 +1658,6 @@ window.addEventListener("error", (e) => {
 
     if (game.shake > 0) game.shake = Math.max(0, game.shake - dt * 0.02);
     input.brushDelta = 0;
-    stateEl.textContent = game.state;
   }
 
   function bite() {
@@ -1724,26 +1668,9 @@ window.addEventListener("error", (e) => {
     game.statePulse = 1;
     game.endReason = "bite";
     const b = badger();
-    spawnImpactBurst(b.cx + b.bodyRx * 0.42, b.cy - b.bodyRy * 0.12, "bite");
+    spawnImpactBurst(b.cx + b.bodyRx * 0.42, b.cy - b.bodyRy * 0.12);
     playBite();
     playJumpscareSfx();
-  }
-
-  function winRun() {
-    if (game.state === STATE.WON) return;
-    setState(STATE.WON);
-    game.endReason = "win";
-    kickShake(0.55);
-    triggerFreeze(55);
-    game.flash = 0.45;
-    game.scorePulse = 1;
-    game.goalPulse = 0.9;
-    spawnImpactBurst(
-      input.onCanvas ? input.x : badger().cx,
-      input.onCanvas ? input.y : badger().cy - 20,
-      "win",
-    );
-    playWin();
   }
 
   function endRun(reason) {
@@ -1755,10 +1682,7 @@ window.addEventListener("error", (e) => {
       saveBest(game.best);
     }
     bestEl.textContent = game.best;
-    if (game.endReason === "win") {
-      overTitle.textContent = "Tamed!";
-      overSub.textContent = `The badger trusts you.  Score: ${finalScore}  •  Best: ${game.best}`;
-    } else if (game.endReason === "afk") {
+    if (game.endReason === "afk") {
       overTitle.textContent = "Badger got bored";
       overSub.textContent = `No brushing for 15s.  Score: ${finalScore}  •  Best: ${game.best}`;
     } else {
@@ -1768,7 +1692,6 @@ window.addEventListener("error", (e) => {
     startBtn.textContent = "Try Again";
     overlay.classList.add("show");
     overlay.classList.toggle("bitten", game.endReason === "bite");
-    stateEl.textContent = "";
   }
 
   function startRun() {
@@ -1986,9 +1909,8 @@ window.addEventListener("error", (e) => {
   function drawBadger() {
     const b = badger();
     const state = game.state;
-
-    // ---- PHOTO PATH: body photo loaded — draw body + optional head overlay. ----
-    if (sprites.body) {
+    if (!sprites.body) return; // sprites always load from disk; guard just in case
+    {
       const now = performance.now() * 0.001;
       const biteT =
         state === STATE.BITING ? Math.min(1, game.stateTimer / 400) : 0;
@@ -2039,11 +1961,6 @@ window.addEventListener("error", (e) => {
         rotation -= 0.04 + biteT * 0.025;
         scaleX += biteT * 0.035;
         scaleY -= biteT * 0.025;
-      } else if (state === STATE.WON) {
-        spriteY -= Math.sin(Math.min(1, game.stateTimer / 700) * Math.PI) * 10;
-        rotation += Math.sin(now * 12) * 0.02;
-        scaleX += 0.04;
-        scaleY += 0.03;
       }
 
       ctx.save();
@@ -2119,174 +2036,13 @@ window.addEventListener("error", (e) => {
         ctx.fillStyle = vignette;
         ctx.fillRect(0, 0, w, h);
         ctx.restore();
-      } else if (state === STATE.WON) {
-        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.015);
-        ctx.save();
-        ctx.fillStyle = `rgba(255, 221, 120, ${0.1 + pulse * 0.08})`;
-        ctx.fillRect(0, 0, w, h);
-        ctx.restore();
       }
-      return;
-    }
-
-    // ---- SHAPE PATH: no photos loaded — run the original placeholder renderer. ----
-    // Head position shifts based on state: away (left) in SAFE, turned toward player (down/front) in WATCHING.
-    const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
-    const easeInOutSine = (x) => -(Math.cos(Math.PI * x) - 1) / 2;
-
-    let headSide = -1;
-    let headOffsetY = -b.bodyRy * 0.25;
-    if (state === STATE.TURNING) {
-      const t = Math.min(1, game.stateTimer / Math.max(1, nextTimings.turning));
-      const eased = easeOutCubic(t);
-      headSide = -1 + eased * 1.9;
-      headOffsetY = -b.bodyRy * (0.25 + eased * 0.15);
-    } else if (state === STATE.WATCHING || state === STATE.BITING) {
-      headSide = 0.9;
-      headOffsetY = -b.bodyRy * 0.4;
-    } else if (state === STATE.SAFE) {
-      if (game.returnAnim.active) {
-        const rt = Math.min(1, game.returnAnim.t / game.returnAnim.dur);
-        const eased = easeInOutSine(rt);
-        headSide = game.returnAnim.from + (-1 - game.returnAnim.from) * eased;
-        headOffsetY = -b.bodyRy * (0.4 - eased * 0.15);
-        if (rt >= 1) game.returnAnim.active = false;
-      }
-      const gl = game.glance;
-      if (
-        gl.active &&
-        game.stateTimer >= gl.at &&
-        game.stateTimer <= gl.at + gl.dur
-      ) {
-        const gt = (game.stateTimer - gl.at) / gl.dur;
-        const shape = Math.sin(gt * Math.PI);
-        headSide = -1 + shape * (gl.peak + 1);
-        headOffsetY = -b.bodyRy * (0.25 + shape * 0.12);
-      }
-    }
-
-    // Body shape
-    {
-      ctx.save();
-      ctx.fillStyle = "#1a1a1a";
-      ctx.beginPath();
-      ctx.ellipse(b.cx, b.cy, b.bodyRx, b.bodyRy, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#c8c2b0";
-      ctx.beginPath();
-      ctx.ellipse(
-        b.cx,
-        b.cy - b.bodyRy * 0.45,
-        b.bodyRx * 0.92,
-        b.bodyRy * 0.55,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      ctx.strokeStyle = "#0d0d0d";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(
-        b.cx,
-        b.cy - b.bodyRy * 0.15,
-        b.bodyRx * 0.98,
-        b.bodyRy * 0.55,
-        0,
-        Math.PI,
-        Math.PI * 2,
-      );
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // Head shape
-    const hx = b.cx + headSide * b.bodyRx * 0.75;
-    const hy = b.cy + headOffsetY;
-    ctx.save();
-    ctx.fillStyle = "#1a1a1a";
-    ctx.beginPath();
-    ctx.arc(hx, hy, b.headR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#c8c2b0";
-    ctx.beginPath();
-    ctx.arc(hx, hy - b.headR * 0.3, b.headR * 0.85, Math.PI, 0);
-    ctx.fill();
-
-    if (headSide > 0.3) {
-      const eyeOffset = b.headR * 0.35;
-      ctx.fillStyle = "#fff";
-      ctx.beginPath();
-      ctx.arc(hx - eyeOffset, hy, b.headR * 0.18, 0, Math.PI * 2);
-      ctx.arc(hx + eyeOffset, hy, b.headR * 0.18, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = state === STATE.BITING ? "#e23" : "#000";
-      ctx.beginPath();
-      ctx.arc(hx - eyeOffset, hy, b.headR * 0.09, 0, Math.PI * 2);
-      ctx.arc(hx + eyeOffset, hy, b.headR * 0.09, 0, Math.PI * 2);
-      ctx.fill();
-      if (state === STATE.WATCHING || state === STATE.BITING) {
-        ctx.fillStyle = "#fff";
-        const mouthY = hy + b.headR * 0.45;
-        const mw = b.headR * 0.5;
-        const mh = state === STATE.BITING ? b.headR * 0.35 : b.headR * 0.18;
-        ctx.fillRect(hx - mw / 2, mouthY, mw, mh);
-        ctx.beginPath();
-        ctx.moveTo(hx - mw / 2 + 4, mouthY);
-        ctx.lineTo(hx - mw / 2 + 8, mouthY + mh);
-        ctx.lineTo(hx - mw / 2 + 12, mouthY);
-        ctx.moveTo(hx + mw / 2 - 4, mouthY);
-        ctx.lineTo(hx + mw / 2 - 8, mouthY + mh);
-        ctx.lineTo(hx + mw / 2 - 12, mouthY);
-        ctx.fillStyle = "#fff";
-        ctx.fill();
-      }
-    } else {
-      ctx.fillStyle = "#0d0d0d";
-      ctx.beginPath();
-      ctx.arc(
-        hx - b.headR * 0.4,
-        hy - b.headR * 0.7,
-        b.headR * 0.15,
-        0,
-        Math.PI * 2,
-      );
-      ctx.arc(
-        hx + b.headR * 0.4,
-        hy - b.headR * 0.7,
-        b.headR * 0.15,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // Tail shape
-    ctx.save();
-    ctx.strokeStyle = "#1a1a1a";
-    ctx.lineWidth = 10;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(b.cx + b.bodyRx * 0.95, b.cy);
-    ctx.quadraticCurveTo(
-      b.cx + b.bodyRx * 1.2,
-      b.cy - b.bodyRy * 0.3,
-      b.cx + b.bodyRx * 1.3,
-      b.cy + b.bodyRy * 0.1,
-    );
-    ctx.stroke();
-    ctx.restore();
-
-    // Danger indicator: red tint overlay when WATCHING
-    if (state === STATE.WATCHING) {
-      ctx.save();
-      ctx.fillStyle = "rgba(226, 50, 50, 0.08)";
-      const { w, h } = logical();
-      ctx.fillRect(0, 0, w, h);
-      ctx.restore();
     }
   }
+
+  // SHAPE-PATH fallback renderer removed 2026-04-20 — body sprite is
+  // always loaded from disk; the placeholder ellipse/shape code was
+  // ~150 lines of never-reached path. Git history retains it.
 
   // ----- Start wiring -----
   loadSprites();
