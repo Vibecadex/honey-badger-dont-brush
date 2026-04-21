@@ -55,6 +55,9 @@ window.addEventListener("error", (e) => {
       head_watching:  "assets/Badger_lockedOn.png",
       head_biting:    "assets/Badger_Pounce.png",
       head_jumpscare: "assets/Badger_Jumpscare.png",
+      background:     "assets/background_painted.png",
+      // background_attack intentionally omitted — badger reuses the
+      // savanna painting during BITING; cat swaps to a blurred desk.
     },
     cat: {
       body:           "assets/Cat_neutral-removebg.png",
@@ -62,6 +65,8 @@ window.addEventListener("error", (e) => {
       head_watching:  "assets/Cat_Active-removebg.png",
       head_biting:    "assets/Cat_lunge-removebg.png",
       head_jumpscare: "assets/Cat_Maul-removebg.png",
+      background:        "assets/desk.png",
+      background_attack: "assets/Desk_blurred.png",
     },
   };
   const SKIN_ORDER = ["badger", "cat"];
@@ -69,21 +74,27 @@ window.addEventListener("error", (e) => {
   // Anchors are normalized (0..1) within each sprite — pivot point that lands
   // at the badger/cat's drawn position. Same anchors work for both skins
   // because the cutouts share the bottom-centered footing convention.
+  const SKIN_SLOTS = [
+    "body", "head_turning", "head_watching", "head_biting", "head_jumpscare",
+    "background", "background_attack",
+  ];
   const SPRITE_SLOTS = {
-    body:           { src: "", anchor: { x: 0.5, y: 1.0 } },
-    head_turning:   { src: "", anchor: { x: 0.5, y: 1.0 } },
-    head_watching:  { src: "", anchor: { x: 0.5, y: 1.0 } },
-    head_biting:    { src: "", anchor: { x: 0.5, y: 1.0 } },
-    head_jumpscare: { src: "", anchor: { x: 0.5, y: 1.0 } },
-    comb:           { src: "assets/Comb_angle.png", anchor: { x: 0.82, y: 0.88 } },
-    background:     { src: "assets/background_painted.png", anchor: { x: 0.5, y: 0.5 } },
+    body:              { src: "", anchor: { x: 0.5, y: 1.0 } },
+    head_turning:      { src: "", anchor: { x: 0.5, y: 1.0 } },
+    head_watching:     { src: "", anchor: { x: 0.5, y: 1.0 } },
+    head_biting:       { src: "", anchor: { x: 0.5, y: 1.0 } },
+    head_jumpscare:    { src: "", anchor: { x: 0.5, y: 1.0 } },
+    background:        { src: "", anchor: { x: 0.5, y: 0.5 } },
+    background_attack: { src: "", anchor: { x: 0.5, y: 0.5 } },
+    comb:              { src: "assets/Comb_angle.png", anchor: { x: 0.82, y: 0.88 } },
   };
 
   function applySkinPaths(skinName) {
     const paths = SKIN_PATHS[skinName] || SKIN_PATHS.badger;
     // Clear skin-driven slots first so a prior skin's sprites don't leak
-    // through if the new skin doesn't define that slot.
-    for (const slot of ["body","head_turning","head_watching","head_biting","head_jumpscare"]) {
+    // through if the new skin doesn't define that slot (e.g. cat's
+    // background_attack must not persist when switching to badger).
+    for (const slot of SKIN_SLOTS) {
       if (SPRITE_SLOTS[slot]) SPRITE_SLOTS[slot].src = "";
     }
     for (const slot of Object.keys(paths)) {
@@ -1199,17 +1210,31 @@ window.addEventListener("error", (e) => {
   }
 
   function buildSettingsMenu() {
-    const btn = document.getElementById('settingsBtn');
+    const startBtnEl = document.getElementById('startBtn');
+    const changeModeBtnEl = document.getElementById('changeModeBtn');
     const panel = document.getElementById('settingsPanel');
-    if (!btn || !panel) return;
+    if (!startBtnEl || !panel) return;
 
-    // Difficulty pills — only built if the DOM container is present.
-    // Currently hidden from the panel (natural scaling drives difficulty),
-    // but the build path stays so re-enabling is a one-line HTML add.
+    // Show/hide the picker panel. Crucially, hide the overlay action
+    // buttons while the picker is up so they don't stack visually —
+    // picker IS the action at that moment.
+    function openPicker() {
+      panel.hidden = false;
+      startBtnEl.hidden = true;
+      if (changeModeBtnEl) changeModeBtnEl.hidden = true;
+      startBtnEl.setAttribute('aria-expanded', 'true');
+    }
+    function closePicker() {
+      panel.hidden = true;
+      startBtnEl.setAttribute('aria-expanded', 'false');
+    }
+
+    // Difficulty pills — DOM container not rendered today (natural scaling
+    // drives difficulty), but the build path stays so re-enabling is a
+    // one-line HTML add.
     const options = document.getElementById('difficultyOptions');
     if (options) {
       options.innerHTML = '';
-      const startBtnEl = document.getElementById('startBtn');
       for (const name of PLAYER_FACING_PRESETS) {
         const opt = document.createElement('button');
         opt.type = 'button';
@@ -1219,16 +1244,17 @@ window.addEventListener("error", (e) => {
         opt.textContent = name.charAt(0) + name.slice(1).toLowerCase();
         opt.addEventListener('click', () => {
           setDifficulty(name);
-          panel.hidden = true;
-          btn.setAttribute('aria-expanded', 'false');
-          if (startBtnEl) startBtnEl.click();
+          closePicker();
+          startRun();
         });
         options.appendChild(opt);
       }
       syncDifficultyUI();
     }
 
-    // Skin pills — Badger / Cat. Same visual treatment as difficulty pills.
+    // Groomer pills — Badger / Cat + a locked "future mode" teaser.
+    // Clicking a real pill sets the skin AND starts the run (the picker
+    // IS the start gesture; no separate confirm step).
     const skinOpts = document.getElementById('skinOptions');
     if (skinOpts) {
       skinOpts.innerHTML = '';
@@ -1239,12 +1265,26 @@ window.addEventListener("error", (e) => {
         opt.dataset.skin = name;
         opt.setAttribute('role', 'radio');
         opt.textContent = name.charAt(0).toUpperCase() + name.slice(1);
-        opt.addEventListener('click', () => setSkin(name));
+        opt.addEventListener('click', () => {
+          setSkin(name);
+          closePicker();
+          startRun();
+        });
         skinOpts.appendChild(opt);
       }
-      // Bind the forward-declared skin syncer to a real updater.
+      // Locked future-mode pill — hints at expansion, no-op on click.
+      const locked = document.createElement('button');
+      locked.type = 'button';
+      locked.className = 'diff-opt locked';
+      locked.setAttribute('aria-disabled', 'true');
+      locked.setAttribute('tabindex', '-1');
+      locked.title = 'Coming soon';
+      locked.textContent = '???';
+      locked.addEventListener('click', (e) => e.preventDefault());
+      skinOpts.appendChild(locked);
+
       syncSkinUI = () => {
-        skinOpts.querySelectorAll('.diff-opt').forEach((b) => {
+        skinOpts.querySelectorAll('.diff-opt[data-skin]').forEach((b) => {
           const on = b.dataset.skin === currentSkin;
           b.classList.toggle('active', on);
           b.setAttribute('aria-checked', on ? 'true' : 'false');
@@ -1262,11 +1302,20 @@ window.addEventListener("error", (e) => {
       });
     }
 
-    btn.addEventListener('click', () => {
-      const expanded = !panel.hidden;
-      panel.hidden = expanded;
-      btn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+    // Start / Try Again button is mode-aware via data-action:
+    //   "open-picker" → reveal the groomer picker (fresh-load path)
+    //   "retry"       → restart with the current skin (post-run quick retry)
+    // endRun flips it to "retry" and reveals the Change Mode button.
+    startBtnEl.addEventListener('click', () => {
+      if (startBtnEl.dataset.action === 'retry') {
+        startRun();
+      } else {
+        openPicker();
+      }
     });
+    if (changeModeBtnEl) {
+      changeModeBtnEl.addEventListener('click', openPicker);
+    }
   }
 
   if (document.readyState === 'loading') {
@@ -1748,8 +1797,17 @@ window.addEventListener("error", (e) => {
       overSub.textContent = `Score: ${finalScore}  •  Best: ${game.best}`;
     }
     startBtn.textContent = "Try Again";
+    startBtn.dataset.action = "retry"; // click now calls startRun directly
+    startBtn.hidden = false;            // ensure visible after a picker-close cycle
     overlay.classList.add("show");
     overlay.classList.toggle("bitten", game.endReason === "bite");
+    // Reset the picker + reveal the Change Mode button so the player can
+    // either quick-retry the same skin or flow back into the picker.
+    const pickerPanel = document.getElementById("settingsPanel");
+    if (pickerPanel) pickerPanel.hidden = true;
+    const changeModeBtnEl = document.getElementById("changeModeBtn");
+    if (changeModeBtnEl) changeModeBtnEl.hidden = false;
+    startBtn.setAttribute("aria-expanded", "false");
   }
 
   function startRun() {
@@ -1802,14 +1860,34 @@ window.addEventListener("error", (e) => {
 
     // Background: always fill with a ground tone, then draw the photo over it
     // so letterbox strips (when photo aspect ≠ canvas aspect) match the scene.
+    //
+    // On BITING, skins that define a `background_attack` variant (e.g. cat's
+    // blurred desk) swap to it with a push-in zoom — reads as the camera
+    // lurching toward the player for a forced-perspective impact beat. The
+    // zoom grows slightly across the bite hold so the "slam" feels sustained.
     ctx.fillStyle = "#7a6440"; // dusty savanna
     ctx.fillRect(0, 0, w, h);
+    let bgSlot = "background";
+    let bgScale = 1.08;
+    // Cat's desk.png has a faint AI-tool watermark on the right edge — shift
+    // the whole background slightly left + draw a touch wider so the right
+    // slice sits off-canvas. Badger skin keeps the original centered framing.
+    const bgSkinShiftX = currentSkin === "cat" ? -w * 0.04 : 0;
+    if (game.state === STATE.BITING && sprites.background_attack) {
+      bgSlot = "background_attack";
+      // 1.18 at the moment of bite → 1.32 by the time the screen goes black.
+      const biteT = Math.min(1, game.stateTimer / 800);
+      bgScale = 1.18 + biteT * 0.14;
+    } else if (currentSkin === "cat") {
+      // Idle cat: slightly tighter crop than the 1.08 savanna default.
+      bgScale = 1.15;
+    }
     if (
       !drawSprite(
-        "background",
-        w / 2 + game.bgShiftX,
+        bgSlot,
+        w / 2 + game.bgShiftX + bgSkinShiftX,
         h / 2 + game.bgShiftY,
-        w * 1.08,
+        w * bgScale,
       )
     ) {
       // No photo — draw the placeholder scene instead.
@@ -2021,8 +2099,30 @@ window.addEventListener("error", (e) => {
         scaleY -= biteT * 0.025;
       }
 
+      // Jumpscare drift-forward: once the head_jumpscare sprite takes over
+      // (biteT ≈ 0.55, ~220ms), the attacker drifts toward the camera —
+      // scaling up + lifting off the ground plane as the screen fades to
+      // black. Timed to the preset's BITING_HOLD_MS so it feels consistent
+      // across difficulty tunings.
+      let jumpscareT = 0;
+      if (state === STATE.BITING) {
+        const start = 220;
+        const span = Math.max(1, (config.BITING_HOLD_MS || 2000) - start);
+        jumpscareT = Math.max(0, Math.min(1, (game.stateTimer - start) / span));
+      }
+      if (jumpscareT > 0) {
+        spriteW *= 1 + jumpscareT * 0.9;   // ~1.9× by end of hold
+        spriteY -= jumpscareT * 60;        // lifts off desk → "lunging into the camera"
+      }
+
+      // Cat artwork has its feet higher in its frame than badger's — nudge
+      // the whole sprite down a touch so it actually plants on the desk.
+      if (currentSkin === "cat") spriteY += 18;
+
       ctx.save();
-      ctx.globalAlpha = 0.18 + game.dangerPulse * 0.08;
+      // Shadow fades as the attacker leaves the ground plane during jumpscare.
+      ctx.globalAlpha =
+        (0.18 + game.dangerPulse * 0.08) * (1 - jumpscareT * 0.8);
       ctx.fillStyle = "#1a0f08";
       ctx.beginPath();
       ctx.ellipse(
@@ -2106,7 +2206,9 @@ window.addEventListener("error", (e) => {
   loadSprites();
   overTitle.textContent = "Honey Badger Don't Brush";
   overSub.textContent = "Brush gently. Stop when he looks at you.";
-  startBtn.addEventListener("click", startRun);
+  // The Start button's click handler is wired inside buildSettingsMenu()
+  // so it reveals the groomer picker instead of starting the run directly.
+  // A pill click is what actually fires startRun().
   bestEl.textContent = game.best;
   overlay.classList.add("show");
 

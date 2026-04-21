@@ -175,18 +175,27 @@
     justify-content: center;
     align-items: center;
   }
-  /* Secondary action — Settings — de-emphasized vs. Start. */
-  #settingsBtn {
+  /* Secondary action — Change Mode — de-emphasized vs. Start/Try Again. */
+  #changeModeBtn {
     background: rgba(255, 225, 180, 0.1);
     color: #f3d9a7;
     border: 1px solid rgba(255, 225, 180, 0.28);
+    border-radius: 6px;
+    padding: 12px 28px;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
     box-shadow: 0 8px 22px rgba(0,0,0,0.32);
+    transition: transform 100ms ease, box-shadow 100ms ease, background 100ms ease, color 100ms ease;
   }
-  #settingsBtn:hover {
+  #changeModeBtn:hover {
     background: rgba(255, 225, 180, 0.18);
     color: #fff;
     transform: translateY(-1px) scale(1.03);
     box-shadow: 0 12px 28px rgba(0,0,0,0.38);
+  }
+  #changeModeBtn:active {
+    transform: translateY(1px) scale(0.98);
   }
   #settingsPanel {
     display: flex;
@@ -237,6 +246,26 @@
     color: #1a1a1a;
     border-color: #f3c15b;
     box-shadow: 0 6px 18px rgba(232,179,74,0.32);
+  }
+  /* Locked "future mode" pill — hints at a third option coming later
+     without being interactable. Subdued look, not-allowed cursor,
+     small footnote glyph to set it apart from shipped modes. */
+  .diff-opt.locked {
+    background: rgba(255, 225, 180, 0.04);
+    color: rgba(243, 217, 167, 0.45);
+    border-style: dashed;
+    border-color: rgba(255, 225, 180, 0.15);
+    cursor: not-allowed;
+  }
+  .diff-opt.locked::after {
+    content: " •";
+    opacity: 0.55;
+    margin-left: 2px;
+  }
+  .diff-opt.locked:hover {
+    background: rgba(255, 225, 180, 0.08);
+    color: rgba(243, 217, 167, 0.6);
+    transform: none;
   }
   .settings-hint {
     font-size: 11px;
@@ -334,13 +363,13 @@
     <h1 id="overTitle">Honey Badger Don't Brush</h1>
     <p id="overSub">Brush gently. Stop when he looks at you.</p>
     <div id="overlayButtons">
-      <button id="startBtn">Start</button>
-      <button id="settingsBtn" type="button" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+      <button id="startBtn" aria-expanded="false" aria-controls="settingsPanel" data-action="open-picker">Start</button>
+      <button id="changeModeBtn" type="button" aria-controls="settingsPanel" hidden>Change Mode</button>
     </div>
     <div id="settingsPanel" hidden>
-      <div class="settings-label">Skin</div>
-      <div id="skinOptions" role="radiogroup" aria-label="Skin"></div>
-      <div class="settings-hint">Difficulty scales naturally as you play. Pass <code>?skin=cat</code> in the URL to skip the menu.</div>
+      <div class="settings-label">Pick your groomer</div>
+      <div id="skinOptions" role="radiogroup" aria-label="Groomer"></div>
+      <div class="settings-hint">Difficulty scales naturally as you play. Pass <code>?skin=cat</code> in the URL to skip the picker.</div>
       <label id="scalerToggle" class="settings-micro">
         <input type="checkbox" id="scalerToggleCb" />
         <span>Show scaling overlay <em>(dev)</em></span>
