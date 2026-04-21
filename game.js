@@ -55,13 +55,16 @@ window.addEventListener("error", (e) => {
       head_watching:  "assets/Badger_lockedOn.png",
       head_biting:    "assets/Badger_Pounce.png",
       head_jumpscare: "assets/Badger_Jumpscare.png",
+      // head_fakeout intentionally omitted — badger reuses body during the
+      // fake-glance window (no dedicated asset), see spriteSlot resolver.
     },
     cat: {
       body:           "assets/Cat_neutral-removebg.png",
       head_turning:   "assets/cat_alert-removebg.png",
-      head_watching:  "assets/Cat_active-removebg.png",
+      head_watching:  "assets/Cat_Active-removebg.png",
       head_biting:    "assets/Cat_lunge-removebg.png",
       head_jumpscare: "assets/Cat_Maul-removebg.png",
+      head_fakeout:   "assets/Cat_fakeout-removebg.png",
     },
   };
   const SKIN_ORDER = ["badger", "cat"];
@@ -75,12 +78,18 @@ window.addEventListener("error", (e) => {
     head_watching:  { src: "", anchor: { x: 0.5, y: 1.0 } },
     head_biting:    { src: "", anchor: { x: 0.5, y: 1.0 } },
     head_jumpscare: { src: "", anchor: { x: 0.5, y: 1.0 } },
+    head_fakeout:   { src: "", anchor: { x: 0.5, y: 1.0 } },
     comb:           { src: "assets/Comb_angle.png", anchor: { x: 0.82, y: 0.88 } },
     background:     { src: "assets/background_painted.png", anchor: { x: 0.5, y: 0.5 } },
   };
 
   function applySkinPaths(skinName) {
     const paths = SKIN_PATHS[skinName] || SKIN_PATHS.badger;
+    // Clear skin-driven slots first so the previous skin's head_fakeout
+    // (if any) doesn't leak into a skin that doesn't define it.
+    for (const slot of ["body","head_turning","head_watching","head_biting","head_jumpscare","head_fakeout"]) {
+      if (SPRITE_SLOTS[slot]) SPRITE_SLOTS[slot].src = "";
+    }
     for (const slot of Object.keys(paths)) {
       if (SPRITE_SLOTS[slot]) SPRITE_SLOTS[slot].src = paths[slot];
     }
@@ -91,6 +100,9 @@ window.addEventListener("error", (e) => {
   let currentSkin = "badger";
   function loadSprites() {
     for (const [slot, def] of Object.entries(SPRITE_SLOTS)) {
+      // Slots with an empty src (e.g. head_fakeout on the badger skin)
+      // are intentionally unloaded — the renderer falls back to body.
+      if (!def.src) { delete sprites[slot]; continue; }
       const img = new Image();
       img.onload = () => {
         sprites[slot] = img;
@@ -1994,6 +2006,19 @@ window.addEventListener("error", (e) => {
       else if (state === STATE.WATCHING) spriteSlot = "head_watching";
       else if (state === STATE.BITING)
         spriteSlot = biteT < 0.55 ? "head_biting" : "head_jumpscare";
+      // Fake-glance swap: during the SAFE-state glance window, skins with
+      // a dedicated fakeout sprite (e.g. cat) show it instead of the
+      // neutral body. Badger has no fakeout asset → sprites.head_fakeout
+      // is undefined → fall through to body silently.
+      else if (
+        state === STATE.SAFE &&
+        game.glance.active &&
+        sprites.head_fakeout &&
+        game.stateTimer >= game.glance.at &&
+        game.stateTimer <= game.glance.at + game.glance.dur
+      ) {
+        spriteSlot = "head_fakeout";
+      }
 
       if (state === STATE.TURNING) {
         spriteX += turnT * 6;
