@@ -44,44 +44,51 @@ window.addEventListener("error", (e) => {
   fitCanvas();
 
   // ----- Sprite / asset loader -----
-  // Drop PNGs with these filenames into /assets and they'll replace the placeholder shapes.
-  // Each slot is optional — missing slots fall back to the shape renderer. Until any sprite
-  // loads, everything renders exactly as before.
-  //
-  // Anchors are normalized (0..1) within each sprite, describing where the sprite's
-  // logical pivot sits. Body anchor should be its visual center; head anchor should be
-  // where it attaches to the body; comb anchor should be the grip point on the handle.
-  const SPRITE_SLOTS = {
-    // Real honey badger photos from Wikimedia Commons (CC-licensed).
-    // Legacy slot names retained so the generated full-body state art can drop
-    // into the existing renderer without disturbing the shape fallback.
-    body: {
-      src: "assets/Badger_Neutral.png",
-      anchor: { x: 0.5, y: 1.0 },
+  // SKIN_PATHS pairs each gameplay state with the asset for that skin. Switching
+  // skins at runtime updates SPRITE_SLOTS.*.src, clears the loaded-image cache,
+  // and re-fires loadSprites — drawBadger silently no-ops via its !sprites.body
+  // guard during the brief reload window.
+  const SKIN_PATHS = {
+    badger: {
+      body:           "assets/Badger_Neutral.png",
+      head_turning:   "assets/Badger_alert.png",
+      head_watching:  "assets/Badger_lockedOn.png",
+      head_biting:    "assets/Badger_Pounce.png",
+      head_jumpscare: "assets/Badger_Jumpscare.png",
     },
-    head_turning: {
-      src: "assets/Badger_alert.png",
-      anchor: { x: 0.5, y: 1.0 },
-    },
-    head_watching: {
-      src: "assets/Badger_lockedOn.png",
-      anchor: { x: 0.5, y: 1.0 },
-    },
-    head_biting: {
-      src: "assets/Badger_Pounce.png",
-      anchor: { x: 0.5, y: 1.0 },
-    },
-    head_jumpscare: {
-      src: "assets/Badger_Jumpscare.png",
-      anchor: { x: 0.5, y: 1.0 },
-    },
-    comb: { src: "assets/Comb_angle.png", anchor: { x: 0.82, y: 0.88 } },
-    background: {
-      src: "assets/background_painted.png",
-      anchor: { x: 0.5, y: 0.5 },
+    cat: {
+      body:           "assets/Cat_neutral-removebg.png",
+      head_turning:   "assets/cat_alert-removebg.png",
+      head_watching:  "assets/Cat_active-removebg.png",
+      head_biting:    "assets/Cat_lunge-removebg.png",
+      head_jumpscare: "assets/Cat_Maul-removebg.png",
     },
   };
+  const SKIN_ORDER = ["badger", "cat"];
+
+  // Anchors are normalized (0..1) within each sprite — pivot point that lands
+  // at the badger/cat's drawn position. Same anchors work for both skins
+  // because the cutouts share the bottom-centered footing convention.
+  const SPRITE_SLOTS = {
+    body:           { src: "", anchor: { x: 0.5, y: 1.0 } },
+    head_turning:   { src: "", anchor: { x: 0.5, y: 1.0 } },
+    head_watching:  { src: "", anchor: { x: 0.5, y: 1.0 } },
+    head_biting:    { src: "", anchor: { x: 0.5, y: 1.0 } },
+    head_jumpscare: { src: "", anchor: { x: 0.5, y: 1.0 } },
+    comb:           { src: "assets/Comb_angle.png", anchor: { x: 0.82, y: 0.88 } },
+    background:     { src: "assets/background_painted.png", anchor: { x: 0.5, y: 0.5 } },
+  };
+
+  function applySkinPaths(skinName) {
+    const paths = SKIN_PATHS[skinName] || SKIN_PATHS.badger;
+    for (const slot of Object.keys(paths)) {
+      if (SPRITE_SLOTS[slot]) SPRITE_SLOTS[slot].src = paths[slot];
+    }
+  }
+  // Initial paths populated before loadSprites runs (called near bottom of IIFE).
+  applySkinPaths("badger");
   const sprites = {}; // slot -> HTMLImageElement once loaded
+  let currentSkin = "badger";
   function loadSprites() {
     for (const [slot, def] of Object.entries(SPRITE_SLOTS)) {
       const img = new Image();
@@ -94,6 +101,22 @@ window.addEventListener("error", (e) => {
       img.src = def.src;
     }
   }
+
+  // Switch between SKIN_PATHS variants at runtime. Clears the cached
+  // sprite map so drawBadger no-ops via its !sprites.body guard until
+  // the new images finish decoding (typically <100 ms on cached fetches).
+  function setSkin(name) {
+    if (!(name in SKIN_PATHS)) return;
+    currentSkin = name;
+    applySkinPaths(name);
+    for (const k of Object.keys(sprites)) delete sprites[k];
+    loadSprites();
+    try { localStorage.setItem(LS_KEYS.skin, name); } catch (e) {}
+    syncSkinUI();
+  }
+
+  // Forward declaration — defined later when the Settings DOM is built.
+  let syncSkinUI = () => {};
 
   const jumpscareSfx = new Audio("assets/JumpScare.mp3");
   jumpscareSfx.preload = "auto";
@@ -880,6 +903,7 @@ window.addEventListener("error", (e) => {
     difficulty: "tamebadger.difficulty",
     knobs: "tamebadger.knobs",
     scalerOverlay: "tamebadger.scaler.overlay",
+    skin: "tamebadger.skin",
   };
 
   // `config` is a plain mutable object. Readers dereference every frame, so
@@ -925,10 +949,17 @@ window.addEventListener("error", (e) => {
       urlDiff in DIFFICULTY_PRESETS
         ? urlDiff
         : localStorage.getItem(LS_KEYS.difficulty) || "NORMAL";
-    return { difficulty };
+    const urlSkin = (p.get("skin") || "").toLowerCase();
+    const skin =
+      urlSkin in SKIN_PATHS
+        ? urlSkin
+        : localStorage.getItem(LS_KEYS.skin) || "badger";
+    return { difficulty, skin };
   }
 
   const RUNTIME_FLAGS = parseRuntimeFlags();
+  applySkinPaths(RUNTIME_FLAGS.skin);
+  currentSkin = RUNTIME_FLAGS.skin;
   applyPreset(RUNTIME_FLAGS.difficulty);
   applyKnobOverrides();
 
@@ -1162,38 +1193,57 @@ window.addEventListener("error", (e) => {
   function buildSettingsMenu() {
     const btn = document.getElementById('settingsBtn');
     const panel = document.getElementById('settingsPanel');
+    if (!btn || !panel) return;
+
+    // Difficulty pills — only built if the DOM container is present.
+    // Currently hidden from the panel (natural scaling drives difficulty),
+    // but the build path stays so re-enabling is a one-line HTML add.
     const options = document.getElementById('difficultyOptions');
-    if (!btn || !panel || !options) return;
-
-    // Settings is hidden by default so players land on the natural scaling
-    // experience. Reveal only when `?settings=1` is on the URL — lets us
-    // (and dev tooling) get into the difficulty picker + scaler overlay.
-    try {
-      const p = new URLSearchParams(location.search);
-      if (p.get('settings') === '1') btn.hidden = false;
-    } catch (e) { /* URLSearchParams unavailable — leave hidden */ }
-
-    // Populate the picker buttons once. Skip DEV from the public UI.
-    options.innerHTML = '';
-    const startBtnEl = document.getElementById('startBtn');
-    for (const name of PLAYER_FACING_PRESETS) {
-      const opt = document.createElement('button');
-      opt.type = 'button';
-      opt.className = 'diff-opt';
-      opt.dataset.preset = name;
-      opt.setAttribute('role', 'radio');
-      opt.textContent = name.charAt(0) + name.slice(1).toLowerCase();
-      // Clicking a difficulty applies the preset AND starts the run —
-      // players expect picking difficulty to be the terminal action.
-      opt.addEventListener('click', () => {
-        setDifficulty(name);
-        panel.hidden = true;
-        btn.setAttribute('aria-expanded', 'false');
-        if (startBtnEl) startBtnEl.click();
-      });
-      options.appendChild(opt);
+    if (options) {
+      options.innerHTML = '';
+      const startBtnEl = document.getElementById('startBtn');
+      for (const name of PLAYER_FACING_PRESETS) {
+        const opt = document.createElement('button');
+        opt.type = 'button';
+        opt.className = 'diff-opt';
+        opt.dataset.preset = name;
+        opt.setAttribute('role', 'radio');
+        opt.textContent = name.charAt(0) + name.slice(1).toLowerCase();
+        opt.addEventListener('click', () => {
+          setDifficulty(name);
+          panel.hidden = true;
+          btn.setAttribute('aria-expanded', 'false');
+          if (startBtnEl) startBtnEl.click();
+        });
+        options.appendChild(opt);
+      }
+      syncDifficultyUI();
     }
-    syncDifficultyUI();
+
+    // Skin pills — Badger / Cat. Same visual treatment as difficulty pills.
+    const skinOpts = document.getElementById('skinOptions');
+    if (skinOpts) {
+      skinOpts.innerHTML = '';
+      for (const name of SKIN_ORDER) {
+        const opt = document.createElement('button');
+        opt.type = 'button';
+        opt.className = 'diff-opt';
+        opt.dataset.skin = name;
+        opt.setAttribute('role', 'radio');
+        opt.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+        opt.addEventListener('click', () => setSkin(name));
+        skinOpts.appendChild(opt);
+      }
+      // Bind the forward-declared skin syncer to a real updater.
+      syncSkinUI = () => {
+        skinOpts.querySelectorAll('.diff-opt').forEach((b) => {
+          const on = b.dataset.skin === currentSkin;
+          b.classList.toggle('active', on);
+          b.setAttribute('aria-checked', on ? 'true' : 'false');
+        });
+      };
+      syncSkinUI();
+    }
 
     // Scaler overlay toggle — small dev checkbox at the bottom of the panel.
     const scalerCb = document.getElementById('scalerToggleCb');
