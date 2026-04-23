@@ -62,7 +62,7 @@ window.addEventListener("error", (e) => {
     cat: {
       body:           "assets/Cat_neutral-removebg.png",
       head_turning:   "assets/cat_alert-removebg.png",
-      head_watching:  "assets/Cat_Active-removebg.png",
+      head_watching:  "assets/Cat_active-removebg.png",
       head_biting:    "assets/Cat_lunge-removebg.png",
       head_jumpscare: "assets/Cat_Maul-removebg.png",
       background:        "assets/desk.png",
