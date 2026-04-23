@@ -9,7 +9,23 @@ python -m http.server 8000
 # then open http://localhost:8000
 ```
 
-Deployed to GitHub Pages from `main` via `.github/workflows/pages.yml`.
+## Deploy (Vercel)
+
+Pushed to `main` → Vercel auto-deploys as a static site. No build step, no serverless functions; Vercel just serves the repo files as-is.
+
+**One-time setup (Vercel dashboard):**
+
+1. New Project → Import the GitHub repo
+2. Framework Preset: **Other**
+3. Root Directory: `./` (the repo root)
+4. Build Command: *(leave empty)*
+5. Output Directory: *(leave empty)*
+6. Install Command: *(leave empty)*
+7. Deploy
+
+Every subsequent push to `main` redeploys within ~15 s. Preview deployments fire for every branch + PR automatically.
+
+**Config:** [vercel.json](vercel.json) at the repo root pins a couple of sensible defaults — longer cache on `/assets/*` (PNGs and audio rarely change), shorter revalidation window on `sdk.js` (we want quick updates when the Vibecade SDK rebuilds). HTML + `game.js` inherit Vercel's default short-cache + revalidate.
 
 ## Difficulty presets
 
@@ -150,7 +166,7 @@ pnpm -F @vibecade/sdk build
 cp packages/sdk/dist/sdk.js /path/to/honey-badger-dont-brush/sdk.js
 ```
 
-Commit the artifact alongside `index.html`. GitHub Pages serves it as-is.
+Commit the artifact alongside `index.html`. Vercel serves it as-is on the next push.
 
 **2. Paste the prod anon key** into `index.html`. Find `ANON_KEY = '<PASTE_PROD_ANON_KEY>'` and replace with the real value from:
 
@@ -161,7 +177,7 @@ Safe to commit — Supabase RLS + JWT are the real access control.
 
 ### Verify end-to-end
 
-Open the game with `?vc_smoke=1` on the URL (e.g. `https://vibecadex.github.io/honey-badger-dont-brush/?vc_smoke=1`). The inline init block fires `trackEvent('smoke-test')`, `submitScore({score: 1})`, and `getLeaderboard({limit: 5})` once on page load. Console should show:
+Open the game with `?vc_smoke=1` on the URL (e.g. `https://<your-vercel-project>.vercel.app/?vc_smoke=1`). The inline init block fires `trackEvent('smoke-test')`, `submitScore({score: 1})`, and `getLeaderboard({limit: 5})` once on page load. Console should show:
 
 ```
 [vibecade] init ok; player = { ... }
