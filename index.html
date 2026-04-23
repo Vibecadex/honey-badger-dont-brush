@@ -378,5 +378,84 @@
   </div>
 
   <script src="game.js"></script>
+
+  <!--
+    Vibecade backend integration.
+
+    Three scripts load in order:
+      1. Supabase UMD bundle (prerequisite for the SDK)
+      2. Self-hosted sdk.js — build from the vibecade repo:
+           pnpm install && pnpm -F @vibecade/sdk build
+           cp packages/sdk/dist/sdk.js /path/to/this-repo/sdk.js
+      3. Init + (optional) smoke test.
+
+    If sdk.js hasn't been dropped in yet, init quietly no-ops and the
+    game continues normally. submitScore / trackEvent calls inside
+    game.js are vc?.-guarded so they skip when Vibecade isn't ready.
+
+    To verify connectivity end-to-end, load the game with ?vc_smoke=1 —
+    submits a test score of 1 + a "smoke-test" event, then prints the
+    top-5 leaderboard. Safe to commit alongside the prod anon key;
+    Supabase RLS + JWT are the real access control per TODO.md.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="./sdk.js"></script>
+  <script>
+    (() => {
+      // --- Config ---------------------------------------------------
+      // Dev API key — throwaway for smoke testing per Vibecade setup
+      // notes. Rotate + inject-at-build-time before shipping for real.
+      const GAME_ID = 'honey-badger';
+      const API_KEY = 'pk_dev_honeybadger_a1b2c3d4e5f6g7h8';
+      const API_URL = 'https://kyhrmknwykrcdxkbrkiz.supabase.co';
+      // Grab from Vercel (Settings → Env Vars → VITE_SUPABASE_ANON_KEY)
+      // or Supabase (Project Settings → API → anon public key). Safe
+      // to commit; replace the placeholder below.
+      const ANON_KEY = '<PASTE_PROD_ANON_KEY>';
+
+      const placeholderKey = ANON_KEY.charAt(0) === '<';
+      if (typeof Vibecade !== 'function') {
+        console.warn('[vibecade] sdk.js not loaded yet — integration inert. ' +
+          'Build it from the vibecade repo and drop it in next to index.html.');
+        return;
+      }
+      if (placeholderKey) {
+        console.warn('[vibecade] anonKey placeholder unset in index.html — ' +
+          'integration inert until you paste the real key.');
+        return;
+      }
+
+      const vc = new Vibecade({
+        gameId: GAME_ID,
+        apiKey: API_KEY,
+        apiUrl: API_URL,
+        anonKey: ANON_KEY,
+        debug: true,
+      });
+      // Expose on window so game.js can fire-and-forget submit/track calls.
+      window.vc = vc;
+
+      (async () => {
+        try {
+          await vc.init();
+          console.log('[vibecade] init ok; player =', vc.getPlayer());
+
+          // Smoke-test path: only runs with ?vc_smoke=1 in the URL so
+          // every page refresh doesn't pollute the leaderboard with
+          // a score of 1.
+          const url = new URLSearchParams(location.search);
+          if (url.get('vc_smoke') === '1') {
+            vc.trackEvent('smoke-test', { source: 'honey-badger' });
+            const score = await vc.submitScore({ score: 1 });
+            console.log('[vibecade] smoke score submitted, rank =', score.rank);
+            const top = await vc.getLeaderboard({ limit: 5 });
+            console.log('[vibecade] leaderboard top-5', top);
+          }
+        } catch (err) {
+          console.error('[vibecade]', err && err.code, err && err.message, err);
+        }
+      })();
+    })();
+  </script>
 </body>
 </html>
