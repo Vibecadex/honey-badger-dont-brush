@@ -168,12 +168,23 @@ cp packages/sdk/dist/sdk.js /path/to/honey-badger-dont-brush/sdk.js
 
 Commit the artifact alongside `index.html`. Vercel serves it as-is on the next push.
 
-**2. Paste the prod anon key** into `index.html`. Find `ANON_KEY = '<PASTE_PROD_ANON_KEY>'` and replace with the real value from:
+**2. Set the anon key as a Vercel env var.** In the Vercel dashboard → Project → Settings → Environment Variables, add **one** of these (checked in priority order by [scripts/inject-env.js](scripts/inject-env.js)):
 
-- Vercel → Project → Settings → Environment Variables → `VITE_SUPABASE_ANON_KEY`, **or**
+1. `VIBECADE_ANON_KEY` *(preferred — explicit)*
+2. `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. `VITE_SUPABASE_ANON_KEY`
+4. `SUPABASE_ANON_KEY`
+
+Apply it to Production + Preview + Development. Grab the value from:
+
+- Vercel → *another Vibecade project* → Settings → Environment Variables → `VITE_SUPABASE_ANON_KEY`, or
 - Supabase → Dashboard → Project Settings → API → anon public key
 
-Safe to commit — Supabase RLS + JWT are the real access control.
+At deploy time, `vercel.json:buildCommand` runs `node scripts/inject-env.js` which substitutes `<PASTE_PROD_ANON_KEY>` in `index.html` with the env-var value. The committed HTML keeps the placeholder; the deployed artifact gets the real key. Rotating the key = update the env var + redeploy, no git commit needed.
+
+If the env var isn't set (e.g. local `vercel dev` without config), the script warns and leaves the placeholder; the runtime init then no-ops cleanly with its own `[vibecade] anonKey placeholder unset` console warning.
+
+Supabase RLS + JWT are the real access control — the anon key is a "public" secret by design, so exposing it in the built HTML is intended.
 
 ### Verify end-to-end
 
