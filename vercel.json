@@ -1,5 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node scripts/inject-env.js",
+  "outputDirectory": ".",
   "trailingSlash": false,
   "cleanUrls": false,
   "headers": [
