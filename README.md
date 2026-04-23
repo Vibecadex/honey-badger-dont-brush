@@ -135,3 +135,52 @@ That's the whole change — no call sites edit, no panel edit (sliders generate 
 2. If you want it live-editable in the debug panel, add an entry to `SLIDER_SPEC` with `{ min, max, step }`. Archetype arrays render automatically if the key name matches `*_ARCHETYPES` and the shape is `[{ cumW, base, rand }, ...]`.
 3. Replace the literal at the call site with `config.YOUR_KEY`.
 4. If the value needs friendly formatting in the panel (e.g. ms or fixed-decimal), add a case to `formatKnobValue` in `game.js`.
+
+## Vibecade backend (score tracking + telemetry)
+
+[index.html](index.html) loads three scripts in order: the Supabase UMD bundle (via jsdelivr), a self-hosted `./sdk.js`, and an inline init block that exposes `window.vc` to the game. [game.js](game.js) fires `submitScore` on `endRun` and `trackEvent('run_start'|'run_end', ...)` in the matching flow points — all calls are `window.vc?.`-guarded so they silently skip if the SDK hasn't loaded (missing `sdk.js`, placeholder anon key, offline, whatever).
+
+### Required one-time setup
+
+**1. Build and drop in `sdk.js`.** Not yet published to npm/CDN — from the vibecade repo:
+
+```bash
+pnpm install
+pnpm -F @vibecade/sdk build
+cp packages/sdk/dist/sdk.js /path/to/honey-badger-dont-brush/sdk.js
+```
+
+Commit the artifact alongside `index.html`. GitHub Pages serves it as-is.
+
+**2. Paste the prod anon key** into `index.html`. Find `ANON_KEY = '<PASTE_PROD_ANON_KEY>'` and replace with the real value from:
+
+- Vercel → Project → Settings → Environment Variables → `VITE_SUPABASE_ANON_KEY`, **or**
+- Supabase → Dashboard → Project Settings → API → anon public key
+
+Safe to commit — Supabase RLS + JWT are the real access control.
+
+### Verify end-to-end
+
+Open the game with `?vc_smoke=1` on the URL (e.g. `https://vibecadex.github.io/honey-badger-dont-brush/?vc_smoke=1`). The inline init block fires `trackEvent('smoke-test')`, `submitScore({score: 1})`, and `getLeaderboard({limit: 5})` once on page load. Console should show:
+
+```
+[vibecade] init ok; player = { ... }
+[vibecade] smoke score submitted, rank = 1
+[vibecade] leaderboard top-5 [ ... ]
+```
+
+Network tab: three `*.supabase.co` requests to `/auth/v1/signup`, `/functions/v1/submit-score`, `/functions/v1/track-events`, all 200.
+
+Drop `?vc_smoke=1` afterward — regular play submits real scores on `endRun` without the leaderboard-polluting score-of-1 calls.
+
+### Events emitted during normal play
+
+| Event | Fires in | Props |
+|---|---|---|
+| `run_start` | `startRun()` after overlay dismiss | `{ skin, preset, winTarget }` |
+| `run_end` | `endRun()` after any ending | `{ reason: 'bite'\|'afk', score, duration_ms, skin }` |
+| `submitScore` | `endRun()` (not `trackEvent` — calls the `/submit-score` Edge Function) | `{ score }` |
+
+### Rotating the API key
+
+`pk_dev_honeybadger_a1b2c3d4e5f6g7h8` is a throwaway dev key committed inline. Before any competitive launch, rotate to a fresh random and inject at build time (or move the constant out of `index.html` into a non-committed config). Flip the row's `requires_play_token` flag to `true` at the same time to opt into `startPlay()` anti-cheat.

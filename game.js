@@ -1784,9 +1784,32 @@ window.addEventListener("error", (e) => {
     if (reason) game.endReason = reason;
     game.running = false;
     const finalScore = Math.floor(game.score);
+    const durationMs = game.sessionStartedAt
+      ? Math.round(performance.now() - game.sessionStartedAt)
+      : null;
     if (finalScore > game.best) {
       game.best = finalScore;
       saveBest(game.best);
+    }
+    // Vibecade backend: fire-and-forget score submission + run_end event.
+    // Both calls are vc?.-guarded so they silently skip when the SDK
+    // hasn't loaded yet (missing sdk.js, placeholder anon key, offline, etc).
+    try {
+      if (window.vc && typeof window.vc.submitScore === "function") {
+        window.vc
+          .submitScore({ score: finalScore })
+          .catch((e) => console.warn("[vibecade] submitScore failed", e));
+      }
+      if (window.vc && typeof window.vc.trackEvent === "function") {
+        window.vc.trackEvent("run_end", {
+          reason: game.endReason,
+          score: finalScore,
+          duration_ms: durationMs,
+          skin: currentSkin,
+        });
+      }
+    } catch (e) {
+      console.warn("[vibecade] endRun integration error", e);
     }
     bestEl.textContent = game.best;
     if (game.endReason === "afk") {
@@ -1846,6 +1869,18 @@ window.addEventListener("error", (e) => {
     combGhosts.length = 0;
     game.running = true;
     overlay.classList.remove("show", "bitten");
+    // Vibecade: run_start event. Silent no-op if SDK hasn't initialized.
+    try {
+      if (window.vc && typeof window.vc.trackEvent === "function") {
+        window.vc.trackEvent("run_start", {
+          skin: currentSkin,
+          preset: config._presetName,
+          winTarget: Math.ceil(game.winTarget),
+        });
+      }
+    } catch (e) {
+      console.warn("[vibecade] startRun integration error", e);
+    }
     setState(STATE.SAFE);
   }
 
