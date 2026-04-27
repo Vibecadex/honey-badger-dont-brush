@@ -407,10 +407,12 @@
       // notes. Rotate + inject-at-build-time before shipping for real.
       const GAME_ID = 'honey-badger';
       const API_KEY = 'pk_dev_honeybadger_a1b2c3d4e5f6g7h8';
-      const API_URL = 'https://kyhrmknwykrcdxkbrkiz.supabase.co';
-      // Grab from Vercel (Settings → Env Vars → VITE_SUPABASE_ANON_KEY)
-      // or Supabase (Project Settings → API → anon public key). Safe
-      // to commit; replace the placeholder below.
+      // apiUrl is intentionally omitted — the SDK defaults to
+      // https://api.vibecade.ai, the canonical platform host. Keeps
+      // external games stable through any future Supabase-project
+      // migration (one DNS flip vs. chasing every game's deploy).
+      // Grab the anon key from Vercel env vars; scripts/inject-env.js
+      // substitutes <PASTE_PROD_ANON_KEY> at build time.
       const ANON_KEY = '<PASTE_PROD_ANON_KEY>';
 
       const placeholderKey = ANON_KEY.charAt(0) === '<';
@@ -428,7 +430,6 @@
       const vc = new Vibecade({
         gameId: GAME_ID,
         apiKey: API_KEY,
-        apiUrl: API_URL,
         anonKey: ANON_KEY,
         debug: true,
       });
