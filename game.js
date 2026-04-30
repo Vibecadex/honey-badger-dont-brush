@@ -69,7 +69,11 @@ window.addEventListener("error", (e) => {
       background_attack: "assets/Desk_blurred.png",
     },
   };
-  const SKIN_ORDER = ["badger", "cat"];
+  // SKIN_ORDER = the publicly-pickable skins shown in the Settings panel.
+  // Badger is intentionally hidden for now — assets + SKIN_PATHS.badger
+  // remain in place so ?skin=badger URL flag still works for dev/internal
+  // testing, but the on-screen picker offers only Cat (+ ??? locked teaser).
+  const SKIN_ORDER = ["cat"];
 
   // Anchors are normalized (0..1) within each sprite — pivot point that lands
   // at the badger/cat's drawn position. Same anchors work for both skins
@@ -969,10 +973,19 @@ window.addEventListener("error", (e) => {
         ? urlDiff
         : localStorage.getItem(LS_KEYS.difficulty) || "NORMAL";
     const urlSkin = (p.get("skin") || "").toLowerCase();
-    const skin =
-      urlSkin in SKIN_PATHS
-        ? urlSkin
-        : localStorage.getItem(LS_KEYS.skin) || "badger";
+    // URL flag wins — lets devs hit ?skin=badger explicitly even though
+    // the picker doesn't expose it. Otherwise honor localStorage only if
+    // the stored skin is still publicly visible (i.e. in SKIN_ORDER).
+    // This way someone whose previous session ended on the now-hidden
+    // badger skin gets bumped to the current default rather than stuck
+    // on a skin the picker can no longer offer them.
+    let skin;
+    if (urlSkin in SKIN_PATHS) {
+      skin = urlSkin;
+    } else {
+      const stored = localStorage.getItem(LS_KEYS.skin);
+      skin = stored && SKIN_ORDER.includes(stored) ? stored : SKIN_ORDER[0];
+    }
     return { difficulty, skin };
   }
 
