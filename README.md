@@ -1,4 +1,4 @@
-# Honey Badger Don't Brush
+# Don't Brush the Cat
 
 Static HTML5 canvas game. No build step — `index.html` + `game.js` + `assets/`.
 
@@ -32,7 +32,7 @@ Every subsequent push to `main` redeploys within ~15 s. Preview deployments fire
 All gameplay-feel numbers live on a single `config` object driven by a preset. The preset is resolved on load, in priority order:
 
 1. `?difficulty=HARD` URL param
-2. `localStorage['tamebadger.difficulty']`
+2. `localStorage['dontbrushthecat.difficulty']`
 3. `NORMAL` (default — matches current shipping behavior)
 
 | Preset | Feel | Goal | Key knobs |
@@ -49,7 +49,7 @@ Difficulty cascade (2026-04-20): the shipping `NORMAL` became `HARD`, the old `E
 | Trigger | Effect |
 |---|---|
 | `?difficulty=HARD` | Load with HARD preset. Valid values: `EASY` / `NORMAL` / `HARD` / `DEV`. |
-| `?telemetry=1` | Enable telemetry for this session. Also settable via `localStorage['tamebadger.telemetry.enabled'] = '1'`. |
+| `?telemetry=1` | Enable telemetry for this session. Also settable via `localStorage['dontbrushthecat.telemetry.enabled'] = '1'`. |
 | `?debug=1` | Auto-open the debug panel on load (handy for shared playtest links). |
 | backtick (`` ` ``) | Toggle debug panel. |
 | `]` | Cycle preset forward: EASY → NORMAL → HARD → DEV → EASY. Clears knob overrides. |
@@ -67,7 +67,7 @@ Backtick opens a hidden DOM overlay anchored to the game frame. Header shows the
 Every slider change:
 
 1. Mutates `config` in place — **takes effect on the next frame** (no reload).
-2. Persists a **diff** against the active preset to `localStorage['tamebadger.knobs']`. Only keys that differ are written, so `[` reset wipes cleanly.
+2. Persists a **diff** against the active preset to `localStorage['dontbrushthecat.knobs']`. Only keys that differ are written, so `[` reset wipes cleanly.
 3. Emits a `knob_changed` telemetry event.
 
 ## Playtest telemetry
@@ -99,9 +99,9 @@ Gated — does nothing unless `?telemetry=1` or the localStorage flag is set.
 | `preset_changed` | `cyclePreset(...)` | `{ preset }` |
 | `knob_changed` | slider `input` | `{ key, value }` |
 
-**Storage:** ring buffer (max 20 sessions, 500 events/session) mirrored to `localStorage['tamebadger.telemetry']` on every `endSession` and on `visibilitychange → hidden`. Writes are skipped with a `console.warn` if the serialized buffer exceeds 2 MB.
+**Storage:** ring buffer (max 20 sessions, 500 events/session) mirrored to `localStorage['dontbrushthecat.telemetry']` on every `endSession` and on `visibilitychange → hidden`. Writes are skipped with a `console.warn` if the serialized buffer exceeds 2 MB.
 
-**Export:** the "export JSON" button in the debug panel downloads the full buffer (plus the in-progress session, if any) as `tamebadger-telemetry-<ts>.json`.
+**Export:** the "export JSON" button in the debug panel downloads the full buffer (plus the in-progress session, if any) as `dontbrushthecat-telemetry-<ts>.json`.
 
 **Swap for a backend:** gameplay code only calls `telemetry.send(event_type, props)`. Replace the body of `send` in `game.js` with:
 

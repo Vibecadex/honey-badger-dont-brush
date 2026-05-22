@@ -14,7 +14,7 @@ window.addEventListener("error", (e) => {
   const bestEl = document.getElementById("best");
   const goalEl = document.getElementById("goal");
   // #state badge removed 2026-04-20 — danger reads entirely from the
-  // badger posture / screen tints. No more DOM writes per frame.
+  // cat posture / screen tints. No more DOM writes per frame.
   const overlay = document.getElementById("overlay");
   const overTitle = document.getElementById("overTitle");
   const overSub = document.getElementById("overSub");
@@ -44,40 +44,30 @@ window.addEventListener("error", (e) => {
   fitCanvas();
 
   // ----- Sprite / asset loader -----
-  // SKIN_PATHS pairs each gameplay state with the asset for that skin. Switching
-  // skins at runtime updates SPRITE_SLOTS.*.src, clears the loaded-image cache,
-  // and re-fires loadSprites — drawBadger silently no-ops via its !sprites.body
-  // guard during the brief reload window.
+  // SKIN_PATHS pairs each gameplay state with the asset for that skin.
+  // Only one skin ships today — the cat — but the indirection stays so
+  // adding a future variant is one entry + one SKIN_ORDER push away.
+  // Switching skins at runtime updates SPRITE_SLOTS.*.src, clears the
+  // loaded-image cache, and re-fires loadSprites — drawCreature silently
+  // no-ops via its !sprites.body guard during the brief reload window.
   const SKIN_PATHS = {
-    badger: {
-      body:           "assets/Badger_Neutral.png",
-      head_turning:   "assets/Badger_alert.png",
-      head_watching:  "assets/Badger_lockedOn.png",
-      head_biting:    "assets/Badger_Pounce.png",
-      head_jumpscare: "assets/Badger_Jumpscare.png",
-      background:     "assets/background_painted.png",
-      // background_attack intentionally omitted — badger reuses the
-      // savanna painting during BITING; cat swaps to a blurred desk.
-    },
     cat: {
-      body:           "assets/Cat_neutral-removebg.png",
-      head_turning:   "assets/cat_alert-removebg.png",
-      head_watching:  "assets/Cat_active-removebg.png",
-      head_biting:    "assets/Cat_lunge-removebg.png",
-      head_jumpscare: "assets/Cat_Maul-removebg.png",
+      body:              "assets/Cat_neutral-removebg.png",
+      head_turning:      "assets/cat_alert-removebg.png",
+      head_watching:     "assets/Cat_active-removebg.png",
+      head_biting:       "assets/Cat_lunge-removebg.png",
+      head_jumpscare:    "assets/Cat_Maul-removebg.png",
       background:        "assets/desk.png",
       background_attack: "assets/Desk_blurred.png",
     },
   };
-  // SKIN_ORDER = the publicly-pickable skins shown in the Settings panel.
-  // Badger is intentionally hidden for now — assets + SKIN_PATHS.badger
-  // remain in place so ?skin=badger URL flag still works for dev/internal
-  // testing, but the on-screen picker offers only Cat (+ ??? locked teaser).
+  // SKIN_ORDER = the publicly-pickable skins shown in the picker panel.
+  // First entry is also the default new-user skin.
   const SKIN_ORDER = ["cat"];
 
-  // Anchors are normalized (0..1) within each sprite — pivot point that lands
-  // at the badger/cat's drawn position. Same anchors work for both skins
-  // because the cutouts share the bottom-centered footing convention.
+  // Anchors are normalized (0..1) within each sprite — pivot point that
+  // lands at the cat's drawn position. Bottom-centered footing matches
+  // every cutout we ship.
   const SKIN_SLOTS = [
     "body", "head_turning", "head_watching", "head_biting", "head_jumpscare",
     "background", "background_attack",
@@ -94,10 +84,9 @@ window.addEventListener("error", (e) => {
   };
 
   function applySkinPaths(skinName) {
-    const paths = SKIN_PATHS[skinName] || SKIN_PATHS.badger;
+    const paths = SKIN_PATHS[skinName] || SKIN_PATHS.cat;
     // Clear skin-driven slots first so a prior skin's sprites don't leak
-    // through if the new skin doesn't define that slot (e.g. cat's
-    // background_attack must not persist when switching to badger).
+    // through if the new skin doesn't define that slot.
     for (const slot of SKIN_SLOTS) {
       if (SPRITE_SLOTS[slot]) SPRITE_SLOTS[slot].src = "";
     }
@@ -106,13 +95,13 @@ window.addEventListener("error", (e) => {
     }
   }
   // Initial paths populated before loadSprites runs (called near bottom of IIFE).
-  applySkinPaths("badger");
+  applySkinPaths("cat");
   const sprites = {}; // slot -> HTMLImageElement once loaded
-  let currentSkin = "badger";
+  let currentSkin = "cat";
   function loadSprites() {
     for (const [slot, def] of Object.entries(SPRITE_SLOTS)) {
-      // Slots with an empty src (e.g. head_fakeout on the badger skin)
-      // are intentionally unloaded — the renderer falls back to body.
+      // Slots with an empty src are intentionally unloaded — the renderer
+      // falls back to body.
       if (!def.src) { delete sprites[slot]; continue; }
       const img = new Image();
       img.onload = () => {
@@ -126,7 +115,7 @@ window.addEventListener("error", (e) => {
   }
 
   // Switch between SKIN_PATHS variants at runtime. Clears the cached
-  // sprite map so drawBadger no-ops via its !sprites.body guard until
+  // sprite map so drawCreature no-ops via its !sprites.body guard until
   // the new images finish decoding (typically <100 ms on cached fetches).
   function setSkin(name) {
     if (!(name in SKIN_PATHS)) return;
@@ -289,9 +278,9 @@ window.addEventListener("error", (e) => {
   }
 
   function spawnBrushBurst(x, y, intensity) {
-    // Only shed fur strands — no cream/tan spark debris. The previous layers
-    // read as energy sparks against the savanna; fur-only reads as "the
-    // badger is losing hair where I'm stroking."
+    // Only shed fur strands — no cream/tan spark debris. Reads as
+    // "the cat is losing hair where I'm stroking" rather than
+    // generic energy sparks.
     const furColors = ["215,215,210", "168,165,158", "90,82,72", "240,238,228"];
     const furCount = 3 + Math.floor(intensity * 3);
     for (let i = 0; i < furCount; i++) {
@@ -775,16 +764,19 @@ window.addEventListener("error", (e) => {
     IDLE: "IDLE",
   };
 
+  // Note: LS_KEYS.best ("dontbrushthecat.best") is defined further down;
+  // loadBest/saveBest reach for the literal so they stay independent of
+  // load order. Keep the literal here in sync with LS_KEYS.best below.
   function loadBest() {
     try {
-      return Number(localStorage.getItem("tamebadger.best") || 0);
+      return Number(localStorage.getItem("dontbrushthecat.best") || 0);
     } catch (e) {
       return 0;
     }
   }
   function saveBest(v) {
     try {
-      localStorage.setItem("tamebadger.best", String(v));
+      localStorage.setItem("dontbrushthecat.best", String(v));
     } catch (e) {}
   }
 
@@ -923,11 +915,36 @@ window.addEventListener("error", (e) => {
   };
 
   const LS_KEYS = {
-    difficulty: "tamebadger.difficulty",
-    knobs: "tamebadger.knobs",
-    scalerOverlay: "tamebadger.scaler.overlay",
-    skin: "tamebadger.skin",
+    best: "dontbrushthecat.best",
+    difficulty: "dontbrushthecat.difficulty",
+    knobs: "dontbrushthecat.knobs",
+    scalerOverlay: "dontbrushthecat.scaler.overlay",
+    skin: "dontbrushthecat.skin",
   };
+
+  // One-time migration from the pre-rename `tamebadger.*` namespace so an
+  // existing player's high score / difficulty preference / etc. carries
+  // over silently. Runs once per browser per key, then never touches the
+  // legacy entries again (we leave them in place — they're harmless,
+  // delete on a future cleanup pass if anyone notices).
+  (function migrateLegacyKeys() {
+    try {
+      const PAIRS = [
+        ["tamebadger.best", LS_KEYS.best],
+        ["tamebadger.difficulty", LS_KEYS.difficulty],
+        ["tamebadger.knobs", LS_KEYS.knobs],
+        ["tamebadger.scaler.overlay", LS_KEYS.scalerOverlay],
+        ["tamebadger.skin", LS_KEYS.skin],
+      ];
+      for (const [legacy, current] of PAIRS) {
+        if (localStorage.getItem(current) !== null) continue;
+        const v = localStorage.getItem(legacy);
+        if (v !== null) localStorage.setItem(current, v);
+      }
+    } catch (e) {
+      /* private browsing / quota / etc. — best-effort migration */
+    }
+  })();
 
   // `config` is a plain mutable object. Readers dereference every frame, so
   // in-place mutation by applyPreset / slider oninput is enough — no rebuild.
@@ -973,12 +990,10 @@ window.addEventListener("error", (e) => {
         ? urlDiff
         : localStorage.getItem(LS_KEYS.difficulty) || "NORMAL";
     const urlSkin = (p.get("skin") || "").toLowerCase();
-    // URL flag wins — lets devs hit ?skin=badger explicitly even though
-    // the picker doesn't expose it. Otherwise honor localStorage only if
-    // the stored skin is still publicly visible (i.e. in SKIN_ORDER).
-    // This way someone whose previous session ended on the now-hidden
-    // badger skin gets bumped to the current default rather than stuck
-    // on a skin the picker can no longer offer them.
+    // URL flag wins — `?skin=<name>` accepts any name in SKIN_PATHS so a
+    // future variant can be dev-tested without exposing it in the picker.
+    // Otherwise honor localStorage only if the stored skin is still
+    // publicly pickable; stale legacy values fall through to SKIN_ORDER[0].
     let skin;
     if (urlSkin in SKIN_PATHS) {
       skin = urlSkin;
@@ -1265,7 +1280,7 @@ window.addEventListener("error", (e) => {
       syncDifficultyUI();
     }
 
-    // Groomer pills — Badger / Cat + a locked "future mode" teaser.
+    // Groomer pills — Cat + a locked "future mode" teaser.
     // Clicking a real pill sets the skin AND starts the run (the picker
     // IS the start gesture; no separate confirm step).
     const skinOpts = document.getElementById('skinOptions');
@@ -1351,7 +1366,7 @@ window.addEventListener("error", (e) => {
     statePulse: 0,
     dangerPulse: 0,
     brushGlow: 0,
-    badgerKick: 0,
+    creatureKick: 0,
     bgShiftX: 0,
     bgShiftY: 0,
     ghostCooldown: 0,
@@ -1359,7 +1374,7 @@ window.addEventListener("error", (e) => {
     afkTimer: 0,
     endReason: null, // 'bite' | 'afk' | 'win'
     winTarget: 0,
-    // Fake glance — decorative mid-SAFE head twitch. Does NOT make the badger watching.
+    // Fake glance — decorative mid-SAFE head twitch. Does NOT make the cat watching.
     glance: { active: false, at: 0, dur: 0, peak: 0 },
     // Smooth return to "facing away" when SAFE begins after a real watch.
     returnAnim: { active: false, t: 0, dur: 350, from: 0.9 },
@@ -1427,7 +1442,7 @@ window.addEventListener("error", (e) => {
     if (s === STATE.TURNING) {
       playHiss();
       game.dangerPulse = Math.max(game.dangerPulse, 0.45);
-      game.badgerKick = Math.max(game.badgerKick, 0.14);
+      game.creatureKick = Math.max(game.creatureKick, 0.14);
       kickShake(0.18);
     }
     if (s === STATE.WATCHING) {
@@ -1435,7 +1450,7 @@ window.addEventListener("error", (e) => {
       game.dangerPulse = 1;
       game.flash = Math.max(game.flash, 0.16);
       kickShake(0.26);
-      const b = badger();
+      const b = subject();
       spawnImpactBurst(b.cx + b.bodyRx * 0.38, b.cy - b.bodyRy * 0.08);
     }
   }
@@ -1535,14 +1550,14 @@ window.addEventListener("error", (e) => {
     input.onCanvas = false;
   });
 
-  // ----- Badger geometry (logical coords = canvas.style px) -----
+  // ----- Subject geometry (logical coords = canvas.style px) -----
   function logical() {
     return {
       w: canvas.width / devicePixelRatio,
       h: canvas.height / devicePixelRatio,
     };
   }
-  function badger() {
+  function subject() {
     const { w, h } = logical();
     return {
       cx: w / 2,
@@ -1553,9 +1568,9 @@ window.addEventListener("error", (e) => {
     };
   }
 
-  // Is cursor over the badger body? (used to require strokes actually land on it)
+  // Is cursor over the cat body? (used to require strokes actually land on it)
   function overBody(x, y) {
-    const b = badger();
+    const b = subject();
     // body ellipse hit-test
     const nx = (x - b.cx) / b.bodyRx;
     const ny = (y - b.cy) / b.bodyRy;
@@ -1603,7 +1618,7 @@ window.addEventListener("error", (e) => {
     game.goalPulse = Math.max(0, game.goalPulse - sec * 2.6);
     game.statePulse = Math.max(0, game.statePulse - sec * 2.4);
     game.brushGlow = Math.max(0, game.brushGlow - sec * 3.6);
-    game.badgerKick = Math.max(0, game.badgerKick - sec * 3.2);
+    game.creatureKick = Math.max(0, game.creatureKick - sec * 3.2);
 
     const dangerTarget =
       game.state === STATE.WATCHING
@@ -1684,7 +1699,7 @@ window.addEventListener("error", (e) => {
     if (brushing) {
       const brushFeel = clamp((effectiveBrush + brushSpeed) / 24, 0, 1);
       game.brushGlow = Math.min(1.25, game.brushGlow + brushFeel * 0.42);
-      game.badgerKick = Math.min(1, game.badgerKick + brushFeel * 0.34);
+      game.creatureKick = Math.min(1, game.creatureKick + brushFeel * 0.34);
       if (game.brushBurstCooldown <= 0) {
         spawnBrushBurst(input.x, input.y + 8, brushFeel);
         game.brushBurstCooldown = 18 + (1 - brushFeel) * 38;
@@ -1787,7 +1802,7 @@ window.addEventListener("error", (e) => {
     game.flash = 0.8;
     game.statePulse = 1;
     game.endReason = "bite";
-    const b = badger();
+    const b = subject();
     spawnImpactBurst(b.cx + b.bodyRx * 0.42, b.cy - b.bodyRy * 0.12);
     playBite();
     playJumpscareSfx();
@@ -1826,7 +1841,7 @@ window.addEventListener("error", (e) => {
     }
     bestEl.textContent = game.best;
     if (game.endReason === "afk") {
-      overTitle.textContent = "Badger got bored";
+      overTitle.textContent = "Cat got bored";
       overSub.textContent = `No brushing for 15s.  Score: ${finalScore}  •  Best: ${game.best}`;
     } else {
       overTitle.textContent = "Mauled!";
@@ -1877,7 +1892,7 @@ window.addEventListener("error", (e) => {
     game.statePulse = 0.45;
     game.dangerPulse = 0;
     game.brushGlow = 0;
-    game.badgerKick = 0;
+    game.creatureKick = 0;
     particles.length = 0;
     combGhosts.length = 0;
     game.running = true;
@@ -1913,22 +1928,19 @@ window.addEventListener("error", (e) => {
     // blurred desk) swap to it with a push-in zoom — reads as the camera
     // lurching toward the player for a forced-perspective impact beat. The
     // zoom grows slightly across the bite hold so the "slam" feels sustained.
-    ctx.fillStyle = "#7a6440"; // dusty savanna
+    ctx.fillStyle = "#7a6440"; // ground tone showing under letterbox strips
     ctx.fillRect(0, 0, w, h);
     let bgSlot = "background";
-    let bgScale = 1.08;
-    // Cat's desk.png has a faint AI-tool watermark on the right edge — shift
-    // the whole background slightly left + draw a touch wider so the right
-    // slice sits off-canvas. Badger skin keeps the original centered framing.
-    const bgSkinShiftX = currentSkin === "cat" ? -w * 0.04 : 0;
+    // Idle: tighter crop than a 1.0× draw so desk.png's faint right-edge
+    // AI-tool watermark sits off-canvas (combined with the −4% horizontal
+    // shift below). Attack: blurred desk pushes in across the bite hold.
+    let bgScale = 1.15;
+    const bgSkinShiftX = -w * 0.04;
     if (game.state === STATE.BITING && sprites.background_attack) {
       bgSlot = "background_attack";
       // 1.18 at the moment of bite → 1.32 by the time the screen goes black.
       const biteT = Math.min(1, game.stateTimer / 800);
       bgScale = 1.18 + biteT * 0.14;
-    } else if (currentSkin === "cat") {
-      // Idle cat: slightly tighter crop than the 1.08 savanna default.
-      bgScale = 1.15;
     }
     if (
       !drawSprite(
@@ -1947,7 +1959,7 @@ window.addEventListener("error", (e) => {
       ctx.fill();
     }
 
-    drawBadger();
+    drawCreature();
     drawParticles();
     if (game.flash > 0.01) {
       ctx.save();
@@ -2090,8 +2102,8 @@ window.addEventListener("error", (e) => {
     ctx.closePath();
   }
 
-  function drawBadger() {
-    const b = badger();
+  function drawCreature() {
+    const b = subject();
     const state = game.state;
     if (!sprites.body) return; // sprites always load from disk; guard just in case
     {
@@ -2117,12 +2129,12 @@ window.addEventListener("error", (e) => {
             : state === STATE.TURNING
               ? 2.7
               : 2.78);
-      spriteW *= 1 + biteT * 0.04 + game.badgerKick * 0.04;
+      spriteW *= 1 + biteT * 0.04 + game.creatureKick * 0.04;
       let spriteX = b.cx;
-      let spriteY = b.cy + b.bodyRy * 1.08 + breathe + game.badgerKick * 5;
-      let rotation = -game.badgerKick * 0.035;
-      let scaleX = 1 + game.badgerKick * 0.045;
-      let scaleY = 1 - game.badgerKick * 0.03;
+      let spriteY = b.cy + b.bodyRy * 1.08 + breathe + game.creatureKick * 5;
+      let rotation = -game.creatureKick * 0.035;
+      let scaleX = 1 + game.creatureKick * 0.045;
+      let scaleY = 1 - game.creatureKick * 0.03;
       let spriteSlot = "body";
       if (state === STATE.TURNING) spriteSlot = "head_turning";
       else if (state === STATE.WATCHING) spriteSlot = "head_watching";
@@ -2163,9 +2175,9 @@ window.addEventListener("error", (e) => {
         spriteY -= jumpscareT * 60;        // lifts off desk → "lunging into the camera"
       }
 
-      // Cat artwork has its feet higher in its frame than badger's — nudge
-      // the whole sprite down a touch so it actually plants on the desk.
-      if (currentSkin === "cat") spriteY += 18;
+      // Cat artwork sits a touch high in its source frame — nudge the
+      // whole sprite down so it actually plants on the desk surface.
+      spriteY += 18;
 
       ctx.save();
       // Shadow fades as the attacker leaves the ground plane during jumpscare.
@@ -2252,7 +2264,7 @@ window.addEventListener("error", (e) => {
 
   // ----- Start wiring -----
   loadSprites();
-  overTitle.textContent = "Honey Badger Don't Brush";
+  overTitle.textContent = "Don't Brush the Cat";
   overSub.textContent = "Brush gently. Stop when he looks at you.";
   // The Start button's click handler is wired inside buildSettingsMenu()
   // so it reveals the groomer picker instead of starting the run directly.
