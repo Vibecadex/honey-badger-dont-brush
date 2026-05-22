@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-<title>Honey Badger Don't Brush</title>
+<title>Don't Brush the Cat</title>
 <style>
   html, body {
     margin: 0;
@@ -175,28 +175,6 @@
     justify-content: center;
     align-items: center;
   }
-  /* Secondary action — Change Mode — de-emphasized vs. Start/Try Again. */
-  #changeModeBtn {
-    background: rgba(255, 225, 180, 0.1);
-    color: #f3d9a7;
-    border: 1px solid rgba(255, 225, 180, 0.28);
-    border-radius: 6px;
-    padding: 12px 28px;
-    font-size: 18px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 8px 22px rgba(0,0,0,0.32);
-    transition: transform 100ms ease, box-shadow 100ms ease, background 100ms ease, color 100ms ease;
-  }
-  #changeModeBtn:hover {
-    background: rgba(255, 225, 180, 0.18);
-    color: #fff;
-    transform: translateY(-1px) scale(1.03);
-    box-shadow: 0 12px 28px rgba(0,0,0,0.38);
-  }
-  #changeModeBtn:active {
-    transform: translateY(1px) scale(0.98);
-  }
   #settingsPanel {
     display: flex;
     flex-direction: column;
@@ -360,11 +338,10 @@
     </div>
   </div>
   <div id="overlay">
-    <h1 id="overTitle">Honey Badger Don't Brush</h1>
+    <h1 id="overTitle">Don't Brush the Cat</h1>
     <p id="overSub">Brush gently. Stop when he looks at you.</p>
     <div id="overlayButtons">
       <button id="startBtn" aria-expanded="false" aria-controls="settingsPanel" data-action="open-picker">Start</button>
-      <button id="changeModeBtn" type="button" aria-controls="settingsPanel" hidden>Change Mode</button>
     </div>
     <div id="settingsPanel" hidden>
       <div class="settings-label">Pick your groomer</div>
