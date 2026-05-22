@@ -1239,17 +1239,14 @@ window.addEventListener("error", (e) => {
 
   function buildSettingsMenu() {
     const startBtnEl = document.getElementById('startBtn');
-    const changeModeBtnEl = document.getElementById('changeModeBtn');
     const panel = document.getElementById('settingsPanel');
     if (!startBtnEl || !panel) return;
 
-    // Show/hide the picker panel. Crucially, hide the overlay action
-    // buttons while the picker is up so they don't stack visually —
-    // picker IS the action at that moment.
+    // Show/hide the picker panel. Hides the Start button while the
+    // picker is up so they don't stack visually — picker IS the action.
     function openPicker() {
       panel.hidden = false;
       startBtnEl.hidden = true;
-      if (changeModeBtnEl) changeModeBtnEl.hidden = true;
       startBtnEl.setAttribute('aria-expanded', 'true');
     }
     function closePicker() {
@@ -1341,9 +1338,6 @@ window.addEventListener("error", (e) => {
         openPicker();
       }
     });
-    if (changeModeBtnEl) {
-      changeModeBtnEl.addEventListener('click', openPicker);
-    }
   }
 
   if (document.readyState === 'loading') {
@@ -1852,12 +1846,10 @@ window.addEventListener("error", (e) => {
     startBtn.hidden = false;            // ensure visible after a picker-close cycle
     overlay.classList.add("show");
     overlay.classList.toggle("bitten", game.endReason === "bite");
-    // Reset the picker + reveal the Change Mode button so the player can
-    // either quick-retry the same skin or flow back into the picker.
+    // Reset the picker so a previous picker-open state doesn't leak
+    // into the end-of-run overlay — only the Try Again button shows.
     const pickerPanel = document.getElementById("settingsPanel");
     if (pickerPanel) pickerPanel.hidden = true;
-    const changeModeBtnEl = document.getElementById("changeModeBtn");
-    if (changeModeBtnEl) changeModeBtnEl.hidden = false;
     startBtn.setAttribute("aria-expanded", "false");
   }
 
